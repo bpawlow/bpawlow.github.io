@@ -1,0 +1,77 @@
+html {
+  font-size: 10px; /* px means "pixels": the base font size is now 10 pixels high  */
+  font-family: 'Epilogue', sans-serif; /* this should be the rest of the output you got from Google fonts */
+}
+h1 {
+  font-size: 100px;
+  color: white;
+  text-align: center;
+  font-family: 'Ranchers', cursive;
+  text-shadow: 5px 5px rgb(169, 3, 211);
+}
+body{
+  width: 1000px;
+  margin: 0 auto;
+  background-color: black;
+  padding: 0px 20px 20px 20px;
+  border: 5px solid black;
+}
+
+p {
+  font-family: 'Grenze Gotisch', cursive;  
+  font-size: 24px;  
+  text-align: center;  
+  line-height: 2;
+  letter-spacing: 1px;
+  color: black;
+}
+li {
+  color: black;
+  text-align: center;
+  font-family: 'Grenze Gotisch', cursive;  
+  font-size: 24px;    
+  line-height: 2;
+  letter-spacing: 1px;
+}
+
+html {
+  background-color: gray;
+  animation: main 10s linear 1;
+  animation-direction: alternate;
+  animation-iteration-count: infinite;
+}
+
+#meme-submission{
+  font-family: 'Ranchers', cursive;
+  color: red;
+  text-align: center;
+  font-size: 60px;
+}
+
+#credit{
+  font-family: 'Grenze Gotisch', cursive;  
+  font-size: 18px;  
+  text-align: center;  
+  line-height: 2;
+  letter-spacing: 1px;
+  color: black;
+}
+form{
+  font-family: Georgia, 'Times New Roman', Times, serif;
+  font-size: 24px;
+  font-weight: bold;
+  text-align: center;
+}
+iframe{
+  margin: 0 auto;
+  display: block;
+}
+
+/*    <style>
+        @keyframes main {
+            0%   {background-color: rgb(206, 55, 0);}
+            25%  {background-color: rgb(141, 0, 0);}
+            50%  {background-color: purple;}
+            100% {background-color: black;}
+        }
+    </style>

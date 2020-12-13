@@ -1,0 +1,166 @@
+@import "susy";
+@import "compass/reset";
+
+
+html {
+  font-size: 10px; /* px means "pixels": the base font size is now 10 pixels high  */
+  font-family: 'Epilogue', sans-serif; /* this should be the rest of the output you got from Google fonts */
+}
+.main{
+  position: relative;
+  z-index: 4;
+}
+h1 {
+  font-size: 100px;
+  color: white;
+  text-align: center;
+  font-family: 'Ranchers', cursive;
+  text-shadow: 5px 5px rgb(169, 3, 211);
+}body{
+  width: 1000px;
+  margin: 0 auto;
+  padding: 0px 20px 20px 20px;
+}
+
+#description-of-spongebob-meme {
+  font-family: 'Ranchers', cursive;  
+  font-size: 24px;    
+  line-height: 2;
+  letter-spacing: 1px;
+  color: black;
+  background-color: white;
+  padding: 0px 20px 20px 20px;
+  border: 5px solid black;
+}
+
+#more-info {
+  background-color: white;
+  padding: 0px 20px 20px 20px;
+  border: 5px solid black;
+}
+p {
+  font-family: 'Ranchers', cursive;  
+  font-size: 24px;  
+  text-align: center;  
+  line-height: 2;
+  letter-spacing: 1px;
+  color: black;
+}
+li {
+  color: black;
+  text-align: center;
+  font-family: 'Grenze Gotisch', cursive;  
+  font-size: 24px;    
+  line-height: 2;
+  letter-spacing: 1px;
+}
+#spongebob-image{
+  height:auto;
+  width: 350px;
+  margin: 0 auto;
+  display: block;
+  border: 5px solid black;
+  z-index: 4;
+}
+
+a{
+  color: red;
+}
+#link{
+  color: blue;
+}
+#meme-submission{
+  font-family: 'Ranchers', cursive;
+  color: red;
+  text-align: center;
+  font-size: 60px;
+}
+#first,#second,#third,#last{
+  color:red;
+}
+ul{
+  border: 1px solid black;
+  background-color: white;
+  border: 5px solid black;
+}
+#credit{
+  font-family: 'Grenze Gotisch', cursive;  
+  font-size: 18px;  
+  text-align: center;  
+  line-height: 2;
+  letter-spacing: 1px;
+  color: black;
+}
+form{
+  font-family: Georgia, 'Times New Roman', Times, serif;
+  font-size: 24px;
+  font-weight: bold;
+  text-align: center;
+}
+iframe{
+  margin: 0 auto;
+  display: block;
+}
+#submission-button{
+  height:auto;
+  width: 350px;
+  margin: 0 auto;
+  display: block;
+}
+
+.stars, .twinkling, .clouds {
+	position: fixed;
+	display:block;
+	top:0; bottom:0;
+	left:0; right:0;
+  width:100%; height:100%;
+}
+.stars {
+	z-index: 0;
+	background: #000 url('https://unblast.com/wp-content/uploads/2018/10/Sky-Stars-Pattern.jpg') repeat top center;
+}
+
+.twinkling{
+	z-index: 1;
+	background:transparent url('https://image.ibb.co/ir1DE8/twinkling.png') repeat top center;
+	animation: move-twink-back 200s linear infinite;
+}
+
+.clouds{
+	z-index: 2;
+    background:transparent url('https://image.ibb.co/bT4N7T/clouds.png') repeat top center;
+	  animation: move-clouds-back 200s linear infinite;
+}
+
+@keyframes move-twink-back {
+	from {background-position:0 0;}
+	to {background-position:-10000px 5000px;}
+}
+
+@keyframes move-clouds-back {
+	from {background-position:0 0;}
+	to {background-position:10000px 0;}
+}
+/* @keyframes main { 
+  0%   {background-color: rgb(206, 55, 0);}
+  25%  {background-color: rgb(141, 0, 0);}
+  50%  {background-color: purple;}
+  100% {background-color: black;}
+}
+.stars
+.twinkling
+.clouds
+  </style>
+
+html {
+  background-color: gray;
+  animation: main 10s linear 1;
+  animation-direction: alternate;
+  animation-iteration-count: infinite;
+}
+#submission-page-background {
+  background-color: gray;
+  animation: main 10s linear 1;
+  animation-direction: alternate;
+  animation-iteration-count: infinite;
+}*/
