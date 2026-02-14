@@ -9,6 +9,7 @@ export default defineConfig({
       jpeg: { quality: 80 },
       png: { quality: 80 },
       webp: { quality: 80 },
+      exclude: /me[^/]*\.jpe?g$/i, // Skip hero – Sharp strips EXIF and rotates it wrong in dist
     }),
   ],
 });
