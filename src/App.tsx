@@ -7,6 +7,7 @@ import type {
 } from "react";
 import HeartsBackground from "./components/HeartsBackground";
 import MarqueeCarousel from "./components/MarqueeCarousel";
+import heroImage from "./assets/me.jpeg";
 import "./App.css";
 
 type Stage = "question" | "yes";
@@ -15,7 +16,6 @@ type Position = { x: number; y: number };
 const DODGE_EDGE_PADDING = 16;
 const TOUCH_OFFSET = 64;
 const YES_TOUCH_ZONE_PADDING = 20;
-const HERO_IMAGE_PATH = "/src/assets/me.jpeg";
 const MESSAGES: string[] = [
   "Do you want to be my valentine? 💘",
   "Are you sure?",
@@ -186,7 +186,7 @@ export default function App(): ReactElement {
       <section className="card" ref={cardRef}>
         {stage === "question" ? (
           <>
-            <img className="hero-photo" src={HERO_IMAGE_PATH} alt="me" />
+            <img className="hero-photo" src={heroImage} alt="me" />
             <h1 style={{ fontSize: "2rem" }}>{promptText}</h1>
 
             <div className="button-zone" ref={buttonZoneRef}>
