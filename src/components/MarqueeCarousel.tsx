@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactElement } from "react";
 
 export const CAROUSEL_SPEED_SECONDS = 40;
@@ -13,9 +13,22 @@ function sortByFileName(a: string, b: string): number {
 }
 
 export default function MarqueeCarousel(): ReactElement {
+  const [allImagesLoaded, setAllImagesLoaded] = useState(false);
+  const loadedUrlsRef = useRef<Set<string>>(new Set());
+
   const images = useMemo(
     () => (Object.values(carouselModules) as string[]).sort(sortByFileName),
     [],
+  );
+
+  const handleImageLoad = useCallback(
+    (src: string) => {
+      loadedUrlsRef.current.add(src);
+      if (loadedUrlsRef.current.size >= images.length) {
+        setAllImagesLoaded(true);
+      }
+    },
+    [images.length],
   );
 
   if (images.length === 0) {
@@ -29,28 +42,46 @@ export default function MarqueeCarousel(): ReactElement {
   const loopImages: string[] = [...images, ...images];
 
   return (
-    <div className="marquee-shell" aria-label="Auto-scrolling photo carousel">
+    <>
+      {!allImagesLoaded && (
+        <div className="carousel-loading" role="status" aria-live="polite" aria-label="Loading photos">
+          <div className="carousel-loading-spinner" />
+          <span>Loading memories...</span>
+        </div>
+      )}
       <div
-        className="marquee-track"
-        style={
-          {
-            "--marquee-duration": `${CAROUSEL_SPEED_SECONDS}s`
-          } as CSSProperties
-        }
+        className="marquee-shell"
+        aria-label="Auto-scrolling photo carousel"
+        aria-hidden={!allImagesLoaded}
+        style={{
+          opacity: allImagesLoaded ? 1 : 0,
+          visibility: allImagesLoaded ? "visible" : "hidden",
+          transition: "opacity 0.25s ease",
+        }}
       >
-        {loopImages.map((src, index) => (
-          <figure className="marquee-item" key={`${src}-${index}`}>
-            <img
-              src={src}
-              alt={`Valentine memory ${index % images.length + 1}`}
-              width={120}
-              height={120}
-              loading="lazy"
-              decoding="async"
-            />
-          </figure>
-        ))}
+        <div
+          className="marquee-track"
+          style={
+            {
+              "--marquee-duration": `${CAROUSEL_SPEED_SECONDS}s`,
+            } as CSSProperties
+          }
+        >
+          {loopImages.map((src, index) => (
+            <figure className="marquee-item" key={`${src}-${index}`}>
+              <img
+                src={src}
+                alt={`Valentine memory ${index % images.length + 1}`}
+                width={120}
+                height={120}
+                loading="eager"
+                decoding="async"
+                onLoad={() => handleImageLoad(src)}
+              />
+            </figure>
+          ))}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type {
   CSSProperties,
   MouseEvent,
@@ -10,6 +10,18 @@ import heroImage from "./assets/me.jpeg";
 
 const MarqueeCarousel = lazy(() => import("./components/MarqueeCarousel"));
 import "./App.css";
+
+// Preload hero image so the browser fetches it as soon as the app runs (industry standard for LCP).
+function useHeroPreload(src: string): void {
+  useEffect(() => {
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    link.href = src;
+    document.head.appendChild(link);
+    return () => link.remove();
+  }, [src]);
+}
 
 type Stage = "question" | "yes";
 type Position = { x: number; y: number };
@@ -32,6 +44,9 @@ export default function App(): ReactElement {
   const [stage, setStage] = useState<Stage>("question");
   const [noAttempts, setNoAttempts] = useState<number>(0);
   const [noPos, setNoPos] = useState<Position>({ x: 0, y: 0 });
+  const [heroImageLoaded, setHeroImageLoaded] = useState(false);
+
+  useHeroPreload(heroImage);
 
   const cardRef = useRef<HTMLDivElement>(null);
   const buttonZoneRef = useRef<HTMLDivElement>(null);
@@ -169,7 +184,19 @@ export default function App(): ReactElement {
     <main className="app">
       <HeartsBackground />
 
-      <section className="card" ref={cardRef}>
+      {!heroImageLoaded && (
+        <div className="app-loader" role="status" aria-live="polite" aria-label="Loading">
+          <div className="app-loader-spinner" />
+          <span className="app-loader-text">Loading...</span>
+        </div>
+      )}
+
+      <section
+        className="card"
+        ref={cardRef}
+        aria-hidden={!heroImageLoaded}
+        style={{ opacity: heroImageLoaded ? 1 : 0, transition: "opacity 0.2s ease" }}
+      >
         {stage === "question" ? (
           <>
             <img
@@ -180,6 +207,8 @@ export default function App(): ReactElement {
               height={180}
               fetchPriority="high"
               decoding="async"
+              onLoad={() => setHeroImageLoaded(true)}
+              onError={() => setHeroImageLoaded(true)}
             />
             <h1 style={{ fontSize: "2rem" }}>{promptText}</h1>
 
