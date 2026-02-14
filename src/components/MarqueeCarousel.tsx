@@ -1,14 +1,23 @@
+import { useMemo } from "react";
 import type { CSSProperties, ReactElement } from "react";
 
 export const CAROUSEL_SPEED_SECONDS = 18;
 
-type MarqueeCarouselProps = {
-  images: string[];
-};
+const carouselModules = import.meta.glob<string>(
+  "../assets/carousel/*.{png,jpg,jpeg,webp}",
+  { eager: true, import: "default" },
+);
 
-export default function MarqueeCarousel({
-  images
-}: MarqueeCarouselProps): ReactElement {
+function sortByFileName(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+}
+
+export default function MarqueeCarousel(): ReactElement {
+  const images = useMemo(
+    () => (Object.values(carouselModules) as string[]).sort(sortByFileName),
+    [],
+  );
+
   if (images.length === 0) {
     return (
       <div className="carousel-fallback" role="status" aria-live="polite">
@@ -34,7 +43,10 @@ export default function MarqueeCarousel({
             <img
               src={src}
               alt={`Valentine memory ${index % images.length + 1}`}
+              width={120}
+              height={120}
               loading="lazy"
+              decoding="async"
             />
           </figure>
         ))}

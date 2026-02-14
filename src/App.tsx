@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useRef, useState } from "react";
 import type {
   CSSProperties,
   MouseEvent,
@@ -6,8 +6,9 @@ import type {
   TouchEvent,
 } from "react";
 import HeartsBackground from "./components/HeartsBackground";
-import MarqueeCarousel from "./components/MarqueeCarousel";
 import heroImage from "./assets/me.jpeg";
+
+const MarqueeCarousel = lazy(() => import("./components/MarqueeCarousel"));
 import "./App.css";
 
 type Stage = "question" | "yes";
@@ -26,9 +27,6 @@ const MESSAGES: string[] = [
   "Ok now I feel real hurt 😭",
 ];
 
-function sortByFileName(a: string, b: string): number {
-  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
-}
 
 export default function App(): ReactElement {
   const [stage, setStage] = useState<Stage>("question");
@@ -39,18 +37,6 @@ export default function App(): ReactElement {
   const buttonZoneRef = useRef<HTMLDivElement>(null);
   const yesBtnRef = useRef<HTMLButtonElement>(null);
   const noBtnRef = useRef<HTMLButtonElement>(null);
-
-  const carouselModules = import.meta.glob<string>(
-    "./assets/carousel/*.{png,jpg,jpeg,webp}",
-    {
-      eager: true,
-      import: "default",
-    },
-  );
-
-  const carouselImages = useMemo<string[]>(() => {
-    return (Object.values(carouselModules) as string[]).sort(sortByFileName);
-  }, [carouselModules]);
 
   const messageIndex = Math.min(noAttempts, MESSAGES.length - 1);
   const promptText = MESSAGES[messageIndex];
@@ -186,7 +172,15 @@ export default function App(): ReactElement {
       <section className="card" ref={cardRef}>
         {stage === "question" ? (
           <>
-            <img className="hero-photo" src={heroImage} alt="me" />
+            <img
+              className="hero-photo"
+              src={heroImage}
+              alt="me"
+              width={180}
+              height={180}
+              fetchPriority="high"
+              decoding="async"
+            />
             <h1 style={{ fontSize: "2rem" }}>{promptText}</h1>
 
             <div className="button-zone" ref={buttonZoneRef}>
@@ -219,7 +213,9 @@ export default function App(): ReactElement {
         ) : (
           <div className="success-screen">
             <h1 className="success-title">yayy!!!</h1>
-            <MarqueeCarousel images={carouselImages} />
+            <Suspense fallback={<div className="carousel-fallback">Loading memories...</div>}>
+              <MarqueeCarousel />
+            </Suspense>
             <p
               className="success-line"
               style={{ fontSize: "1.5rem", marginTop: "1rem" }}
