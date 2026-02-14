@@ -54,6 +54,7 @@ body {
   border: 4px solid #ff4da0;
   box-shadow: 0 8px 22px rgba(255, 77, 160, 0.28);
   margin-top: 0.25rem;
+  image-orientation: none;
 }
 
 h1 {
