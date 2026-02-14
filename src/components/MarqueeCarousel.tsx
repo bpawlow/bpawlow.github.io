@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { CSSProperties, ReactElement } from "react";
 
-export const CAROUSEL_SPEED_SECONDS = 18;
+export const CAROUSEL_SPEED_SECONDS = 40;
 
 const carouselModules = import.meta.glob<string>(
   "../assets/carousel/*.{png,jpg,jpeg,webp}",
