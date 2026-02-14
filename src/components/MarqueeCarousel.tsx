@@ -4,7 +4,7 @@ import type { CSSProperties, ReactElement } from "react";
 export const CAROUSEL_SPEED_SECONDS = 40;
 
 const carouselModules = import.meta.glob<string>(
-  "../assets/carousel/*.{png,jpg,jpeg,webp}",
+  "../assets/carousel-thumbs/*.webp",
   { eager: true, import: "default" },
 );
 

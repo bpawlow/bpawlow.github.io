@@ -6,7 +6,7 @@ import type {
   TouchEvent,
 } from "react";
 import HeartsBackground from "./components/HeartsBackground";
-import heroImage from "./assets/me.jpeg";
+import heroImage from "./assets/me-hero.webp";
 
 const MarqueeCarousel = lazy(() => import("./components/MarqueeCarousel"));
 import "./App.css";
