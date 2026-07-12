@@ -3,3 +3,6 @@ dist
 .DS_Store
 src/assets/carousel-thumbs
 src/assets/me-hero.webp
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts

@@ -1,25 +1,25 @@
 {
-  "name": "valentine-react-ts",
+  "name": "bachelor-basketball-book",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/build-carousel-thumbs.js && tsc -b && vite build",
+    "build": "npm run typecheck && vite build",
+    "test": "vitest run",
     "preview": "vite preview",
-    "postinstall": "node scripts/build-carousel-thumbs.js"
+    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json"
   },
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@types/react": "^18.3.5",
-    "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^4.3.1",
-    "sharp": "^0.34.5",
-    "typescript": "^5.5.4",
-    "vite": "^5.4.2",
-    "vite-plugin-image-optimizer": "^2.0.3"
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^6.0.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.4",
+    "vitest": "^4.1.10"
   }
 }

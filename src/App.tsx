@@ -1,285 +1,427 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import type {
-  CSSProperties,
-  MouseEvent,
-  ReactElement,
-  TouchEvent,
-} from "react";
-import HeartsBackground from "./components/HeartsBackground";
-import heroImage from "./assets/me-hero.webp";
-
-const MarqueeCarousel = lazy(() => import("./components/MarqueeCarousel"));
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ChangeEvent, ReactElement } from "react";
 import "./App.css";
+import { exportState, importState, loadState, saveState } from "./data/persistence";
+import { loadBasketballData, sheetPublicUrl } from "./data/googleSheets";
+import { formatAmerican, money } from "./model/odds";
+import { gradeLeg, ledger, settleTickets } from "./model/settlement";
+import { SimulationClient } from "./model/simulationClient";
+import { calculateStandings } from "./model/standings";
+import { GAMES, TEAM_COLORS } from "./types";
+import type {
+  BasketballData,
+  GameId,
+  GameResult,
+  MarketSelection,
+  ParlayPrice,
+  PersistedState,
+  PlayerBoxScore,
+  Scenario,
+  SimulationSummary,
+  StatKey,
+  TeamId,
+  Ticket,
+} from "./types";
 
-// Preload hero image so the browser fetches it as soon as the app runs (industry standard for LCP).
-function useHeroPreload(src: string): void {
-  useEffect(() => {
-    const link = document.createElement("link");
-    link.rel = "preload";
-    link.as = "image";
-    link.href = src;
-    document.head.appendChild(link);
-    return () => link.remove();
-  }, [src]);
+type Tab = "sportsbook" | "bets" | "tournament" | "rules";
+
+const STAT_LABELS: Record<StatKey, string> = {
+  points: "Points", rebounds: "Rebounds", assists: "Assists", threes: "3PM",
+  pr: "Pts + Reb", pa: "Pts + Ast", ra: "Reb + Ast", pra: "PRA",
+};
+
+function nowLabel(iso: string): string {
+  return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(iso));
 }
 
-type Stage = "question" | "yes";
-type Position = { x: number; y: number };
+function sourceLabel(data: BasketballData): string {
+  if (data.source === "google-sheet") return "Live Sheet";
+  if (data.source === "cached") return "Cached Sheet";
+  return "Offline snapshot";
+}
 
-const DODGE_EDGE_PADDING = 16;
-const TOUCH_OFFSET = 64;
-const YES_TOUCH_ZONE_PADDING = 20;
-const MESSAGES: string[] = [
-  "Do you want to be my valentine? 💘",
-  "Are you sure?",
-  "Really sure?",
-  "Think again 😭",
-  "Ok but like... yes?",
-  "Last chance to choose wisely!",
-  "Ok now I feel real hurt 😭",
-];
+function activeRoster(data: BasketballData, scenario: Scenario, teamId: TeamId) {
+  return data.assignments.filter((item) => item.scenario === scenario && item.teamId === teamId);
+}
 
+function TeamPill({ team }: { team: TeamId }): ReactElement {
+  return <span className="team-pill" style={{ "--team": TEAM_COLORS[team] } as React.CSSProperties}>{team}</span>;
+}
 
-export default function App(): ReactElement {
-  const [stage, setStage] = useState<Stage>("question");
-  const [noAttempts, setNoAttempts] = useState<number>(0);
-  const [noPos, setNoPos] = useState<Position>({ x: 0, y: 0 });
-  const [heroImageLoaded, setHeroImageLoaded] = useState(false);
+function OddsButton({ market, selected, onClick }: { market: MarketSelection; selected: boolean; onClick: () => void }): ReactElement {
+  return (
+    <button className={`odds-button ${selected ? "selected" : ""}`} type="button" onClick={onClick} aria-pressed={selected}>
+      <span>{market.shortLabel}</span>
+      <strong>{formatAmerican(market.americanOdds)}</strong>
+    </button>
+  );
+}
 
-  useHeroPreload(heroImage);
+function MarketPair({ pair, selectedIds, onToggle }: {
+  pair: MarketSelection[];
+  selectedIds: Set<string>;
+  onToggle: (market: MarketSelection) => void;
+}): ReactElement {
+  return (
+    <div className="market-row">
+      <div className="market-name">
+        <span>{pair[0].subject}</span>
+        {pair[0].stat && <small>{STAT_LABELS[pair[0].stat]}</small>}
+      </div>
+      <div className="odds-pair">
+        {pair.map((market) => <OddsButton key={market.id} market={market} selected={selectedIds.has(market.id)} onClick={() => onToggle(market)} />)}
+      </div>
+    </div>
+  );
+}
 
-  const cardRef = useRef<HTMLDivElement>(null);
-  const buttonZoneRef = useRef<HTMLDivElement>(null);
-  const yesBtnRef = useRef<HTMLButtonElement>(null);
-  const noBtnRef = useRef<HTMLButtonElement>(null);
+function BetSlip({ selections, price, pricing, stake, available, onStake, onRemove, onClear, onPlace }: {
+  selections: MarketSelection[];
+  price: ParlayPrice | null;
+  pricing: boolean;
+  stake: string;
+  available: number;
+  onStake: (value: string) => void;
+  onRemove: (id: string) => void;
+  onClear: () => void;
+  onPlace: () => void;
+}): ReactElement {
+  const decimal = selections.length === 1 ? selections[0].decimalOdds : price?.decimalOdds ?? 0;
+  const american = selections.length === 1 ? selections[0].americanOdds : price?.americanOdds ?? 0;
+  const stakeNumber = Number.parseFloat(stake) || 0;
+  const payout = stakeNumber * decimal;
+  return (
+    <aside className="bet-slip">
+      <div className="slip-heading">
+        <div><span className="eyebrow">Your ticket</span><h2>{selections.length > 1 ? `${selections.length}-leg parlay` : "Bet slip"}</h2></div>
+        {selections.length > 0 && <button className="text-button" type="button" onClick={onClear}>Clear</button>}
+      </div>
+      {selections.length === 0 ? (
+        <div className="empty-slip"><span>＋</span><p>Tap any odds to add a pick.</p></div>
+      ) : (
+        <>
+          <div className="slip-legs">
+            {selections.map((market) => (
+              <div className="slip-leg" key={market.id}>
+                <div><strong>{market.label}</strong><small>Game {market.gameNumber} · {market.category}</small></div>
+                <button type="button" onClick={() => onRemove(market.id)} aria-label={`Remove ${market.label}`}>×</button>
+              </div>
+            ))}
+          </div>
+          <div className="price-line">
+            <span>{selections.length > 1 ? "Correlation-adjusted odds" : "Odds"}</span>
+            <strong>{pricing ? "Pricing…" : formatAmerican(american)}</strong>
+          </div>
+          {selections.length > 1 && price && (
+            <p className="model-note">Joint win probability {(price.fairProbability * 100).toFixed(1)}% · priced from {price.eligibleSamples.toLocaleString()} tournament simulations</p>
+          )}
+          <label className="stake-field">
+            <span>Stake <small>{money(available)} available</small></span>
+            <div><input inputMode="decimal" min="0.1" step="0.1" value={stake} onChange={(event) => onStake(event.target.value)} placeholder="0.0" /><b>units</b></div>
+          </label>
+          <div className="payout-card"><span>Potential return</span><strong>{decimal ? payout.toFixed(1) : "—"} units</strong></div>
+          <button className="primary-button" type="button" disabled={pricing || !price && selections.length > 1 || stakeNumber <= 0 || stakeNumber > available} onClick={onPlace}>Place play-money bet</button>
+        </>
+      )}
+    </aside>
+  );
+}
 
-  const messageIndex = Math.min(noAttempts, MESSAGES.length - 1);
-  const promptText = MESSAGES[messageIndex];
-  const yesScale = 1 + Math.min(noAttempts * 0.1, 0.4);
-
-  const moveNoButton = (
-    event?: MouseEvent<HTMLButtonElement> | TouchEvent<HTMLButtonElement>,
-  ): void => {
-    const noButton = noBtnRef.current;
-    const yesButton = yesBtnRef.current;
-    if (!noButton) {
-      return;
-    }
-
-    const btnRect = noButton.getBoundingClientRect();
-    const btnW = btnRect.width;
-    const btnH = btnRect.height;
-
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const maxX = Math.max(DODGE_EDGE_PADDING, vw - btnW - DODGE_EDGE_PADDING);
-    const maxY = Math.max(DODGE_EDGE_PADDING, vh - btnH - DODGE_EDGE_PADDING);
-
-    let yesExcludeLeft = -9999;
-    let yesExcludeTop = -9999;
-    let yesExcludeRight = 9999;
-    let yesExcludeBottom = 9999;
-    if (yesButton) {
-      const yesRect = yesButton.getBoundingClientRect();
-      yesExcludeLeft = yesRect.left - YES_TOUCH_ZONE_PADDING;
-      yesExcludeTop = yesRect.top - YES_TOUCH_ZONE_PADDING;
-      yesExcludeRight = yesRect.right + YES_TOUCH_ZONE_PADDING;
-      yesExcludeBottom = yesRect.bottom + YES_TOUCH_ZONE_PADDING;
-    }
-
-    type Region = { minX: number; maxX: number; minY: number; maxY: number };
-    const regions: Region[] = [];
-
-    if (yesExcludeTop - btnH > DODGE_EDGE_PADDING) {
-      regions.push({
-        minX: DODGE_EDGE_PADDING,
-        maxX,
-        minY: DODGE_EDGE_PADDING,
-        maxY: yesExcludeTop - btnH - DODGE_EDGE_PADDING,
-      });
-    }
-    if (yesExcludeBottom + DODGE_EDGE_PADDING < maxY) {
-      regions.push({
-        minX: DODGE_EDGE_PADDING,
-        maxX,
-        minY: yesExcludeBottom + DODGE_EDGE_PADDING,
-        maxY,
-      });
-    }
-    if (yesExcludeLeft - btnW > DODGE_EDGE_PADDING) {
-      regions.push({
-        minX: DODGE_EDGE_PADDING,
-        maxX: yesExcludeLeft - btnW - DODGE_EDGE_PADDING,
-        minY: DODGE_EDGE_PADDING,
-        maxY,
-      });
-    }
-    if (yesExcludeRight + DODGE_EDGE_PADDING < maxX) {
-      regions.push({
-        minX: yesExcludeRight + DODGE_EDGE_PADDING,
-        maxX,
-        minY: DODGE_EDGE_PADDING,
-        maxY,
-      });
-    }
-
-    const validRegions = regions.filter(
-      (r) => r.maxX > r.minX && r.maxY > r.minY,
-    );
-
-    let x: number;
-    let y: number;
-
-    if (validRegions.length === 0) {
-      x = DODGE_EDGE_PADDING + Math.random() * (maxX - DODGE_EDGE_PADDING);
-      y = DODGE_EDGE_PADDING + Math.random() * (maxY - DODGE_EDGE_PADDING);
-    } else {
-      const region =
-        validRegions[Math.floor(Math.random() * validRegions.length)];
-      const rangeX = Math.max(1, region.maxX - region.minX);
-      const rangeY = Math.max(1, region.maxY - region.minY);
-      x = region.minX + Math.random() * rangeX;
-      y = region.minY + Math.random() * rangeY;
-    }
-
-    if (event && "touches" in event && event.touches.length > 0) {
-      const touch = event.touches[0];
-      const touchX = touch.clientX;
-      const touchY = touch.clientY;
-      const nearFinger =
-        Math.abs(x + btnW / 2 - touchX) < TOUCH_OFFSET &&
-        Math.abs(y + btnH / 2 - touchY) < TOUCH_OFFSET;
-
-      if (nearFinger && validRegions.length > 0) {
-        const awayFromFinger = validRegions.filter((r) => {
-          const cx = (r.minX + r.maxX) / 2;
-          const cy = (r.minY + r.maxY) / 2;
-          return (
-            Math.abs(cx - touchX) > TOUCH_OFFSET ||
-            Math.abs(cy - touchY) > TOUCH_OFFSET
-          );
-        });
-        const regionsToPick =
-          awayFromFinger.length > 0 ? awayFromFinger : validRegions;
-        const chosen =
-          regionsToPick[Math.floor(Math.random() * regionsToPick.length)];
-        const rangeX = Math.max(1, chosen.maxX - chosen.minX);
-        const rangeY = Math.max(1, chosen.maxY - chosen.minY);
-        x = chosen.minX + Math.random() * rangeX;
-        y = chosen.minY + Math.random() * rangeY;
-      }
-    }
-
-    setNoPos({ x, y });
-    setNoAttempts((attempts) => attempts + 1);
+function Sportsbook({ data, summary, gameId, setGameId, selections, toggleMarket }: {
+  data: BasketballData;
+  summary: SimulationSummary;
+  gameId: GameId;
+  setGameId: (game: GameId) => void;
+  selections: MarketSelection[];
+  toggleMarket: (market: MarketSelection) => void;
+}): ReactElement {
+  const game = GAMES.find((candidate) => candidate.id === gameId)!;
+  const selectedIds = new Set(selections.map((item) => item.id));
+  const gameMarkets = summary.markets.filter((market) => market.gameId === gameId);
+  const grouped = (markets: MarketSelection[]) => {
+    const groups = new Map<string, MarketSelection[]>();
+    for (const market of markets) groups.set(market.groupId, [...(groups.get(market.groupId) ?? []), market]);
+    return [...groups.values()];
   };
-
-  const handleBackToQuestion = (): void => {
-    setStage("question");
-    setNoAttempts(0);
-    setNoPos({ x: 0, y: 0 });
-  };
+  const gameLines = grouped(gameMarkets.filter((market) => market.category === "Game lines"));
+  const teamTotals = grouped(gameMarkets.filter((market) => market.category === "Team totals"));
+  const propsByPlayer = new Map<string, MarketSelection[][]>();
+  for (const pair of grouped(gameMarkets.filter((market) => market.category === "Player props"))) {
+    propsByPlayer.set(pair[0].subject, [...(propsByPlayer.get(pair[0].subject) ?? []), pair]);
+  }
 
   return (
-    <main className="app">
-      <HeartsBackground />
-
-      {!heroImageLoaded && (
-        <div className="app-loader" role="status" aria-live="polite" aria-label="Loading">
-          <div className="app-loader-spinner" />
-          <span className="app-loader-text">Loading...</span>
+    <div className="sportsbook-content">
+      <div className="game-tabs" role="tablist">
+        {GAMES.map((item) => <button type="button" role="tab" aria-selected={item.id === gameId} className={item.id === gameId ? "active" : ""} key={item.id} onClick={() => setGameId(item.id)}><span>Game {item.number}</span><small>{item.team1.replace("Team ", "")} vs {item.team2.replace("Team ", "")}</small></button>)}
+      </div>
+      <section className="matchup-hero">
+        <div className="team-side">
+          <TeamPill team={game.team1} /><strong>{summary.teamRatings[game.team1].toFixed(1)}</strong><small>power rating</small>
+          <p>{activeRoster(data, summary.scenario, game.team1).map((item) => item.rotationShare < 1 ? `${item.playerName} (${item.rotationShare * 100}%)` : item.playerName).join(" · ")}</p>
         </div>
-      )}
-
-      <section
-        className="card"
-        ref={cardRef}
-        aria-hidden={!heroImageLoaded}
-        style={{ opacity: heroImageLoaded ? 1 : 0, transition: "opacity 0.2s ease" }}
-      >
-        {stage === "question" ? (
-          <>
-            <img
-              className="hero-photo"
-              src={heroImage}
-              alt="me"
-              width={180}
-              height={180}
-              fetchPriority="high"
-              decoding="async"
-              onLoad={() => setHeroImageLoaded(true)}
-              onError={() => setHeroImageLoaded(true)}
-            />
-            <h1 style={{ fontSize: "2rem" }}>{promptText}</h1>
-
-            <div className="button-zone" ref={buttonZoneRef}>
-              <button
-                ref={yesBtnRef}
-                className="btn btn-yes"
-                type="button"
-                aria-label="Yes, I want to be your valentine"
-                onClick={() => setStage("yes")}
-                style={{ "--yes-scale": yesScale } as CSSProperties}
-              >
-                Yes
-              </button>
-
-              {noAttempts === 0 ? (
-                <button
-                  className="btn btn-no btn-no-inline"
-                  type="button"
-                  aria-label="No, I do not want to be your valentine"
-                  ref={noBtnRef}
-                  onMouseEnter={moveNoButton}
-                  onTouchStart={moveNoButton}
-                  onClick={moveNoButton}
-                >
-                  No
-                </button>
-              ) : null}
-            </div>
-          </>
-        ) : (
-          <div className="success-screen">
-            <h1 className="success-title">yayy!!!</h1>
-            <Suspense fallback={<div className="carousel-fallback">Loading memories...</div>}>
-              <MarqueeCarousel />
-            </Suspense>
-            <p
-              className="success-line"
-              style={{ fontSize: "1.5rem", marginTop: "1rem" }}
-            >
-              Correct answer 😌💘
-            </p>
-            <button
-              className="btn btn-back"
-              type="button"
-              aria-label="Ask the question again"
-              onClick={handleBackToQuestion}
-            >
-              Want me to ask the question again?
-            </button>
-          </div>
-        )}
+        <div className="versus"><span>GAME {game.number}</span><b>VS</b><small>{game.bye} bye</small></div>
+        <div className="team-side right">
+          <TeamPill team={game.team2} /><strong>{summary.teamRatings[game.team2].toFixed(1)}</strong><small>power rating</small>
+          <p>{activeRoster(data, summary.scenario, game.team2).map((item) => item.rotationShare < 1 ? `${item.playerName} (${item.rotationShare * 100}%)` : item.playerName).join(" · ")}</p>
+        </div>
       </section>
 
-      {stage === "question" && noAttempts > 0 ? (
-        <button
-          className="btn btn-no btn-no-fixed"
-          type="button"
-          aria-label="No, I do not want to be your valentine"
-          ref={noBtnRef}
-          onMouseEnter={moveNoButton}
-          onTouchStart={moveNoButton}
-          onClick={moveNoButton}
-          style={{
-            left: `${noPos.x}px`,
-            top: `${noPos.y}px`,
-          }}
-        >
-          No
-        </button>
-      ) : null}
-    </main>
+      <section className="market-card">
+        <div className="section-title"><div><span className="eyebrow">Main board</span><h2>Game lines</h2></div><span className="column-hint">Selection · Odds</span></div>
+        {gameLines.map((pair) => <MarketPair key={pair[0].groupId} pair={pair} selectedIds={selectedIds} onToggle={toggleMarket} />)}
+      </section>
+      <section className="market-card">
+        <div className="section-title"><div><span className="eyebrow">Team markets</span><h2>Team totals</h2></div></div>
+        {teamTotals.map((pair) => <MarketPair key={pair[0].groupId} pair={pair} selectedIds={selectedIds} onToggle={toggleMarket} />)}
+      </section>
+      <div className="section-title props-title"><div><span className="eyebrow">The full board</span><h2>Player props</h2></div><span>{propsByPlayer.size} active players</span></div>
+      <div className="player-prop-grid">
+        {[...propsByPlayer.entries()].map(([player, pairs]) => (
+          <details className="player-card" key={player} open={propsByPlayer.size <= 8}>
+            <summary><span className="avatar">{player.slice(0, 1)}</span><strong>{player}</strong><span>{pairs.length} markets</span></summary>
+            <div>{pairs.map((pair) => <MarketPair key={pair[0].groupId} pair={pair} selectedIds={selectedIds} onToggle={toggleMarket} />)}</div>
+          </details>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TicketsView({ tickets, results }: { tickets: Ticket[]; results: PersistedState["results"] }): ReactElement {
+  if (!tickets.length) return <div className="empty-page"><span>⌁</span><h2>No tickets yet</h2><p>Your straight bets and parlays will appear here.</p></div>;
+  return (
+    <div className="page-stack">
+      <div className="page-heading"><span className="eyebrow">Ledger</span><h1>My bets</h1><p>Ticket lines and odds are frozen when placed.</p></div>
+      {tickets.slice().reverse().map((ticket) => (
+        <article className="ticket-card" key={ticket.id}>
+          <header><div><span className={`status ${ticket.status}`}>{ticket.status}</span><strong>{ticket.legs.length > 1 ? `${ticket.legs.length}-leg parlay` : "Straight bet"}</strong></div><time>{new Date(ticket.createdAt).toLocaleString()}</time></header>
+          <div className="ticket-legs">{ticket.legs.map((leg) => <div key={leg.marketId}><span className={`grade grade-${gradeLeg(leg, results)}`}></span><p><strong>{leg.label}</strong><small>{gradeLeg(leg, results)}</small></p></div>)}</div>
+          <footer><span>Stake <b>{money(ticket.stake)}</b></span><span>Odds <b>{formatAmerican(ticket.americanOdds)}</b></span><span>{ticket.status === "won" ? "Returned" : "To return"} <b>{money(ticket.status === "won" ? ticket.settledReturn : ticket.potentialReturn)}</b></span></footer>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function ScoreInput({ value, onChange, label }: { value: number | null; onChange: (value: number | null) => void; label: string }): ReactElement {
+  return <label className="score-input"><span>{label}</span><input type="number" min="0" max="22" value={value ?? ""} onChange={(event) => onChange(event.target.value === "" ? null : Number(event.target.value))} /></label>;
+}
+
+function TournamentView({ data, scenario, results, onResults }: {
+  data: BasketballData;
+  scenario: Scenario;
+  results: PersistedState["results"];
+  onResults: (results: PersistedState["results"]) => void;
+}): ReactElement {
+  const standings = calculateStandings(results);
+  const updateGame = (gameId: GameId, patch: Partial<GameResult>) => onResults({ ...results, [gameId]: { ...results[gameId], ...patch } });
+  const updatePlayer = (gameId: GameId, playerId: string, field: keyof PlayerBoxScore, value: number) => {
+    const game = results[gameId];
+    const current = game.playerStats[playerId] ?? { playerId, points: 0, rebounds: 0, assists: 0, threes: 0 };
+    updateGame(gameId, { playerStats: { ...game.playerStats, [playerId]: { ...current, [field]: value } } });
+  };
+  return (
+    <div className="page-stack">
+      <div className="page-heading"><span className="eyebrow">Round robin</span><h1>Tournament center</h1><p>Enter official results on the scorekeeper device to settle locally stored tickets.</p></div>
+      <section className="standings-card">
+        <div className="section-title"><div><span className="eyebrow">Live table</span><h2>Standings</h2></div></div>
+        <div className="standings-head"><span>Team</span><span>W</span><span>L</span><span>PF</span><span>PA</span><span>DIFF</span></div>
+        {standings.map((row) => <div className="standing-row" key={row.teamId}><span><b>{row.rank}</b><TeamPill team={row.teamId} /></span><strong>{row.wins}</strong><span>{row.losses}</span><span>{row.pointsFor}</span><span>{row.pointsAgainst}</span><strong className={row.differential > 0 ? "positive" : row.differential < 0 ? "negative" : ""}>{row.differential > 0 ? "+" : ""}{row.differential}</strong></div>)}
+        <p className="tie-note">Ties: wins → point differential → points scored → organizer coin flip.</p>
+      </section>
+      {GAMES.map((game) => {
+        const result = results[game.id];
+        const roster = [...activeRoster(data, scenario, game.team1), ...activeRoster(data, scenario, game.team2)];
+        return (
+          <details className="result-card" key={game.id}>
+            <summary><span>Game {game.number}</span><strong>{game.team1} {result.team1Score ?? "–"} <i>vs</i> {result.team2Score ?? "–"}</strong><span className={result.final ? "final-tag" : "pending-tag"}>{result.final ? "Final" : "Open"}</span></summary>
+            <div className="result-editor">
+              <div className="score-editor">
+                <ScoreInput label={game.team1} value={result.team1Score} onChange={(team1Score) => updateGame(game.id, { team1Score, final: false })} />
+                <b>–</b>
+                <ScoreInput label={game.team2} value={result.team2Score} onChange={(team2Score) => updateGame(game.id, { team2Score, final: false })} />
+                <label className="final-check"><input type="checkbox" checked={result.final} disabled={result.team1Score === null || result.team2Score === null} onChange={(event) => updateGame(game.id, { final: event.target.checked })} /> Mark final</label>
+              </div>
+              <p className="scorekeeper-note">Points use ones-and-twos scoring. A made three counts as 2 points and 1 made three.</p>
+              <div className="box-score-wrap"><table><thead><tr><th>Player</th><th>PTS</th><th>REB</th><th>AST</th><th>3PM</th></tr></thead><tbody>
+                {roster.map((assignment) => {
+                  const box = result.playerStats[assignment.playerId] ?? { playerId: assignment.playerId, points: 0, rebounds: 0, assists: 0, threes: 0 };
+                  return <tr key={`${game.id}-${assignment.playerId}`}><td>{assignment.playerName}{assignment.rotationShare < 1 ? " (sub)" : ""}</td>{(["points", "rebounds", "assists", "threes"] as const).map((field) => <td key={field}><input type="number" min="0" value={box[field]} onChange={(event) => updatePlayer(game.id, assignment.playerId, field, Number(event.target.value))} /></td>)}</tr>;
+                })}
+              </tbody></table></div>
+            </div>
+          </details>
+        );
+      })}
+    </div>
+  );
+}
+
+function RulesView(): ReactElement {
+  return (
+    <div className="page-stack rules-page">
+      <div className="page-heading"><span className="eyebrow">How it works</span><h1>House rules</h1><p>A play-money sportsbook built for the bachelor tournament.</p></div>
+      <div className="rule-grid">
+        <section><span>01</span><h2>Race to 21</h2><p>Inside baskets count 1. Shots beyond the arc count 2. First to 21 or more wins; no win-by-two.</p></section>
+        <section><span>02</span><h2>Fouls</h2><p>No free throws. A foul returns possession to the fouled team with no recorded statistic.</p></section>
+        <section><span>03</span><h2>Schedule</h2><p>Game 1: A–B. Game 2: B–C. Game 3: C–A. Every team plays twice.</p></section>
+        <section><span>04</span><h2>Champion</h2><p>Most wins takes first. A three-way tie uses point differential, then points scored, then a coin flip.</p></section>
+        <section><span>05</span><h2>Your 100</h2><p>Every participant begins with 100 units. The progress meter tracks the requirement to put all 100 into action.</p></section>
+        <section><span>06</span><h2>Parlays</h2><p>Same-game and cross-game combinations are priced from joint tournament simulations, including correlation.</p></section>
+      </div>
+      <section className="method-card"><span className="eyebrow">Pricing methodology</span><h2>Not NBA math in a smaller box</h2><p>The model simulates every possession until one team reaches 21 or 22. Player usage, one- and two-point shooting, defense, rebounds, assists, shared form, and fatigue produce coherent game and player outcomes. Lines are generated from 80,000 complete tournament simulations. Ratings come from the published party spreadsheet and remain subjective.</p><p>This is for entertainment only. No real money is accepted or processed.</p></section>
+    </div>
+  );
+}
+
+export default function App(): ReactElement {
+  const [persisted, setPersisted] = useState<PersistedState>(() => loadState());
+  const [data, setData] = useState<BasketballData | null>(null);
+  const [summary, setSummary] = useState<SimulationSummary | null>(null);
+  const [loadingText, setLoadingText] = useState("Reading the live ratings…");
+  const [error, setError] = useState("");
+  const [tab, setTab] = useState<Tab>("sportsbook");
+  const [gameId, setGameId] = useState<GameId>("game-1");
+  const [selections, setSelections] = useState<MarketSelection[]>([]);
+  const [parlayPrice, setParlayPrice] = useState<ParlayPrice | null>(null);
+  const [pricing, setPricing] = useState(false);
+  const [stake, setStake] = useState("");
+  const [toast, setToast] = useState("");
+  const [showProfile, setShowProfile] = useState(!persisted.participant);
+  const clientRef = useRef<SimulationClient | null>(null);
+
+  const settledTickets = useMemo(() => settleTickets(persisted.tickets, persisted.results), [persisted.tickets, persisted.results]);
+  const account = useMemo(() => ledger(settledTickets), [settledTickets]);
+  const requirement = Math.min(100, account.totalStaked);
+
+  useEffect(() => { saveState({ ...persisted, tickets: settledTickets }); }, [persisted, settledTickets]);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadBasketballData().then((loaded) => { if (!cancelled) setData(loaded); }).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not load ratings"));
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!data) return;
+    clientRef.current?.destroy();
+    const client = new SimulationClient();
+    clientRef.current = client;
+    setSummary(null);
+    setSelections([]);
+    setParlayPrice(null);
+    setLoadingText(`Simulating 80,000 ${persisted.scenario} tournaments…`);
+    client.initialize(data, persisted.scenario).then(setSummary).catch((reason) => setError(reason instanceof Error ? reason.message : "Simulation failed"));
+    return () => client.destroy();
+  }, [data, persisted.scenario]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(""), 3000);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+
+  useEffect(() => {
+    if (selections.length <= 1) { setParlayPrice(null); setPricing(false); return; }
+    let cancelled = false;
+    setPricing(true);
+    clientRef.current?.price(selections.map((item) => item.id))
+      .then((price) => { if (!cancelled) setParlayPrice(price); })
+      .catch((reason) => { if (!cancelled) setToast(reason.message); })
+      .finally(() => { if (!cancelled) setPricing(false); });
+    return () => { cancelled = true; };
+  }, [selections]);
+
+  const toggleMarket = (market: MarketSelection) => {
+    setSelections((current) => {
+      if (current.some((item) => item.id === market.id)) return current.filter((item) => item.id !== market.id);
+      const withoutOpposite = current.filter((item) => item.groupId !== market.groupId);
+      if (withoutOpposite.length >= 6) { setToast("Parlays are limited to 6 legs"); return current; }
+      return [...withoutOpposite, market];
+    });
+  };
+
+  const placeBet = () => {
+    const stakeNumber = Number.parseFloat(stake);
+    const price = selections.length === 1 ? {
+      fairProbability: selections[0].fairProbability,
+      decimalOdds: selections[0].decimalOdds,
+      americanOdds: selections[0].americanOdds,
+    } : parlayPrice;
+    if (!price || !Number.isFinite(stakeNumber) || stakeNumber <= 0 || stakeNumber > account.available) return;
+    const ticket: Ticket = {
+      id: crypto.randomUUID(), createdAt: new Date().toISOString(), participant: persisted.participant,
+      scenario: persisted.scenario, stake: stakeNumber, decimalOdds: price.decimalOdds, americanOdds: price.americanOdds,
+      potentialReturn: Number((stakeNumber * price.decimalOdds).toFixed(2)), fairProbability: price.fairProbability,
+      legs: selections.map((market) => ({ marketId: market.id, gameId: market.gameId, kind: market.kind, subject: market.subject, playerId: market.playerId, teamId: market.teamId, stat: market.stat, side: market.side, line: market.line, label: market.label, odds: market.decimalOdds })),
+      status: "pending", settledReturn: 0,
+    };
+    setPersisted((current) => ({ ...current, tickets: [...current.tickets, ticket] }));
+    setSelections([]); setStake(""); setToast(`Ticket placed · ${money(stakeNumber)} units`);
+  };
+
+  const refreshData = async () => {
+    setLoadingText("Refreshing the published Sheet…"); setSummary(null);
+    const loaded = await loadBasketballData(true); setData(loaded); setToast(`Ratings refreshed from ${sourceLabel(loaded)}`);
+  };
+
+  const setScenario = (scenario: Scenario) => setPersisted((current) => ({ ...current, scenario }));
+
+  const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try { setPersisted(await importState(file)); setToast("Backup imported"); }
+    catch { setToast("That backup file is invalid"); }
+    event.target.value = "";
+  };
+
+  if (error) return <main className="fatal"><h1>We hit the rim.</h1><p>{error}</p><button onClick={() => window.location.reload()}>Try again</button></main>;
+
+  return (
+    <div className="app-shell">
+      <header className="topbar">
+        <button className="brand" type="button" onClick={() => setTab("sportsbook")}><span className="brand-ball">21</span><span><b>THE BACHELOR BOOK</b><small>Three teams. One champion.</small></span></button>
+        <nav>
+          {(["sportsbook", "bets", "tournament", "rules"] as Tab[]).map((item) => <button className={tab === item ? "active" : ""} type="button" key={item} onClick={() => setTab(item)}>{item === "sportsbook" ? "Markets" : item === "bets" ? "My bets" : item[0].toUpperCase() + item.slice(1)}</button>)}
+        </nav>
+        <div className="header-actions">
+          <label className="scenario-toggle"><span>Brad</span><select value={persisted.scenario} onChange={(event) => setScenario(event.target.value as Scenario)}><option>Brad Out</option><option>Brad Plays</option></select></label>
+          <button className="balance-button" type="button" onClick={() => setShowProfile(true)}><span>{persisted.participant || "Player"}</span><strong>{money(account.available)} <small>u</small></strong></button>
+        </div>
+      </header>
+
+      <div className="status-strip">
+        <div><span className="live-dot"></span>{data ? sourceLabel(data) : "Connecting"}{data && <small>updated {nowLabel(data.loadedAt)}</small>}</div>
+        <div className="wager-progress"><span>100-unit mission</span><div><i style={{ width: `${requirement}%` }}></i></div><b>{money(requirement)}/100</b></div>
+        <button type="button" onClick={refreshData} disabled={!data}>↻ Refresh ratings</button>
+      </div>
+
+      {!summary || !data ? (
+        <main className="loading-screen"><div className="loader-ball">21</div><h1>Building the board</h1><p>{loadingText}</p><div className="loading-line"><i></i></div></main>
+      ) : (
+        <main className={`main-layout ${tab === "sportsbook" ? "with-slip" : ""}`}>
+          {tab === "sportsbook" && <Sportsbook data={data} summary={summary} gameId={gameId} setGameId={setGameId} selections={selections} toggleMarket={toggleMarket} />}
+          {tab === "bets" && <TicketsView tickets={settledTickets} results={persisted.results} />}
+          {tab === "tournament" && <TournamentView data={data} scenario={persisted.scenario} results={persisted.results} onResults={(results) => setPersisted((current) => ({ ...current, results }))} />}
+          {tab === "rules" && <RulesView />}
+          {tab === "sportsbook" && <BetSlip selections={selections} price={parlayPrice} pricing={pricing} stake={stake} available={account.available} onStake={setStake} onRemove={(id) => setSelections((current) => current.filter((item) => item.id !== id))} onClear={() => setSelections([])} onPlace={placeBet} />}
+        </main>
+      )}
+
+      {showProfile && (
+        <div className="modal-backdrop" role="presentation">
+          <section className="profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-title">
+            <button className="modal-close" type="button" onClick={() => persisted.participant && setShowProfile(false)}>×</button>
+            <span className="brand-ball large">21</span><span className="eyebrow">Player card</span><h1 id="profile-title">Welcome to the book</h1><p>Enter a name for this device. Your 100-unit bankroll and tickets stay in this browser.</p>
+            <label><span>Display name</span><input autoFocus value={persisted.participant} maxLength={30} placeholder="Your name" onChange={(event) => setPersisted((current) => ({ ...current, participant: event.target.value }))} /></label>
+            <div className="profile-stats"><div><span>Available</span><strong>{money(account.available)}</strong></div><div><span>Total staked</span><strong>{money(account.totalStaked)}</strong></div><div><span>Tickets</span><strong>{persisted.tickets.length}</strong></div></div>
+            <button className="primary-button" type="button" disabled={!persisted.participant.trim()} onClick={() => setShowProfile(false)}>Enter sportsbook</button>
+            <div className="backup-actions"><button type="button" onClick={() => exportState({ ...persisted, tickets: settledTickets })}>Export backup</button><label>Import backup<input type="file" accept="application/json" onChange={handleImport} /></label><a href={sheetPublicUrl} target="_blank" rel="noreferrer">Open ratings sheet</a></div>
+          </section>
+        </div>
+      )}
+      {toast && <div className="toast" role="status">{toast}</div>}
+    </div>
   );
 }
