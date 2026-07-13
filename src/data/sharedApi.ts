@@ -1,4 +1,5 @@
 import { GAMES } from "../types";
+import { normalizePlayers } from "../model/normalizeRatings";
 import type {
   CommunityState,
   GameId,
@@ -19,7 +20,7 @@ export async function loadCommunityState(apiUrl: string): Promise<CommunityState
   if (payload.ok === false || payload.error) throw new Error(payload.error || "Shared Sheet API failed");
   return {
     ...payload,
-    players: payload.players ?? [], assignments: payload.assignments ?? [], schedule: payload.schedule ?? [],
+    players: normalizePlayers(payload.players ?? []), assignments: payload.assignments ?? [], schedule: payload.schedule ?? [],
     boxScores: payload.boxScores ?? [], bets: payload.bets ?? [], betLegs: payload.betLegs ?? [], participants: payload.participants ?? [],
     loadedAt: new Date().toISOString(),
   };
@@ -34,6 +35,18 @@ export async function submitSharedTicket(apiUrl: string, ticket: Ticket): Promis
   if (!response.ok) throw new Error(`Shared bet submission returned ${response.status}`);
   const payload = await response.json() as { ok: boolean; error?: string };
   if (!payload.ok) throw new Error(payload.error || "The shared Sheet rejected this ticket");
+}
+
+export async function registerSharedParticipant(apiUrl: string, participant: string): Promise<string> {
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    redirect: "follow",
+    body: JSON.stringify({ action: "registerParticipant", participant }),
+  });
+  if (!response.ok) throw new Error(`Participant registration returned ${response.status}`);
+  const payload = await response.json() as { ok: boolean; participant?: string; error?: string };
+  if (!payload.ok || !payload.participant) throw new Error(payload.error || "Participant registration failed");
+  return payload.participant;
 }
 
 export function resultsFromCommunity(community: CommunityState | null): PersistedState["results"] | null {
@@ -73,6 +86,7 @@ export function sharedTickets(community: CommunityState): Ticket[] {
     fairProbability: bet.decimalOdds > 0 ? 1 / bet.decimalOdds : 0,
     status: bet.status,
     settledReturn: bet.settledReturn,
+    centralized: true,
     legs: (legsByBet.get(bet.betId) ?? []).sort((a, b) => a.legNumber - b.legNumber).map((leg) => ({
       marketId: `${leg.betId}:${leg.legNumber}`,
       gameId: leg.gameId,

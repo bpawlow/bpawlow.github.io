@@ -1,4 +1,5 @@
 import type { Assignment, BasketballData, Player, Scenario, TeamId } from "../types";
+import { normalizePlayers } from "../model/normalizeRatings";
 
 const PUBLISHED_ID = "2PACX-1vRDjKmtD4NhvY8nf7vAomX-PYzTsBT183-XdRlwlbNQppvJmNYix6XI8DRzQiwKf7PpLmXgPWQ8nqUX";
 const BASE_URL = `https://docs.google.com/spreadsheets/d/e/${PUBLISHED_ID}/pub`;
@@ -145,7 +146,7 @@ function parseAssignments(csv: string, players: Player[]): Assignment[] {
 }
 
 function normalize(ratingsCsv: string, assignmentsCsv: string, source: BasketballData["source"]): BasketballData {
-  const players = parsePlayers(ratingsCsv);
+  const players = normalizePlayers(parsePlayers(ratingsCsv));
   return { players, assignments: parseAssignments(assignmentsCsv, players), source, loadedAt: new Date().toISOString() };
 }
 

@@ -115,6 +115,7 @@ export interface Ticket {
   legs: TicketLeg[];
   status: TicketStatus;
   settledReturn: number;
+  centralized?: boolean;
 }
 
 export interface PlayerBoxScore {
@@ -143,6 +144,9 @@ export interface PersistedState {
 
 export interface SharedScheduleRow {
   gameId: GameId;
+  team1: string;
+  team2: string;
+  bye: string;
   status: "UPCOMING" | "LIVE" | "FINAL";
   team1Score: number | null;
   team2Score: number | null;

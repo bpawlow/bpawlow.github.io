@@ -11,7 +11,7 @@ Google Sheets is the event's central datastore. Google Apps Script is a small co
 | Betting status | `App Config!B3` and per-game lock cells | Organizer |
 | Official scores | `Schedule & Results` | Scorekeeper |
 | Official player stats | `Box Scores` | Scorekeeper |
-| Participants | `Participants` | Organizer |
+| Participants | `Participants` | Registered automatically from the website; organizer can deactivate |
 | Tickets and legs | `Bets` / `Bet Legs` | App through Apps Script |
 | Betting leaderboard | Derived from tickets/results | Automatic |
 | Player leaderboard | Derived from box scores | Automatic |
@@ -29,9 +29,18 @@ Google Sheets is the event's central datastore. Google Apps Script is a small co
 9. Copy the URL ending in `/exec`.
 10. Paste it into `App Config!B7` for reference. The current production URL is embedded in the website, so participants do not need to paste it into their Player Cards.
 11. Test the URL by opening it in a browser with `?action=state` appended. It should return JSON containing `"ok":true`.
-12. Add every bettor to `Participants`. Use exactly the same spelling they will enter in the app.
+12. Reload the Google Sheet once so the new **Bachelor Book** organizer menu appears.
 
-The Player Card field remains available as an advanced override if the Apps Script deployment URL ever changes.
+Participants do not see or enter the Apps Script URL. It is embedded in the production website.
+
+## Participant names
+
+When someone enters a display name and presses **Enter sportsbook**, the app automatically adds that person to `Participants` with 100 starting units. Matching is case-insensitive, so `Brad` and `brad` cannot become separate accounts. Existing active names are reused with their canonical spelling.
+
+- The organizer does not need to enter names manually.
+- Ask everyone to use one recognizable name and not change it after betting.
+- Once a participant has staked units, their name field is locked on that browser.
+- To block someone, set `Active?` to `FALSE` in `Participants`.
 
 ## Before the tournament
 
@@ -69,6 +78,10 @@ After the game:
 
 The Apps Script will grade affected legs and tickets during the next sync. The website refreshes every 30 seconds, and you can also press **Refresh ratings**.
 
+## Team display names
+
+The `Team 1`, `Team 2`, and `Bye` values in `Schedule & Results` are the shared display names. Updating those cells updates game tabs, matchup headers, team-grouped player props, market labels, standings, and Tournament cards after the next sync. Keep each team's spelling consistent in all three schedule rows.
+
 ## Leaderboards
 
 The website’s Leaderboard screen has two tables:
@@ -86,12 +99,26 @@ The spreadsheet contains equivalent `Betting Leaderboard` and `Player Leaderboar
 - Do not manually alter `Bets` or `Bet Legs` during play unless correcting an organizer-confirmed data error.
 - If a result is corrected, the settlement pass recomputes ticket states from the official records.
 
+### Permanently deleting a mistaken bet
+
+Use the organizer-only menu in the Google Sheet:
+
+1. Open `Bets` and copy the exact value from the mistaken ticket's `Bet ID` column.
+2. In the Google Sheet menu bar, select **Bachelor Book → Delete a bet**.
+3. Paste the Bet ID and select **OK**.
+4. Review the confirmation and select **Yes**.
+5. The script permanently deletes the ticket from `Bets` and every matching row from `Bet Legs`.
+6. Wait up to 30 seconds or press **Refresh ratings** in the website.
+
+The participant's available units are recalculated automatically, and the deleted ticket disappears from My Bets and the leaderboard. If the **Bachelor Book** menu is missing, reload the spreadsheet after saving the latest `Code.gs`. Do not delete only the `Bets` row manually; orphaned `Bet Legs` rows would remain.
+
 ## Rating management
 
-The normalized skill cells have a cross-group average near 5. The normalization preserved the original ordering, ties, and differences while removing category-wide inflation.
+Every shared sync automatically normalizes each skill category to a group average of 5. The normalization preserves ordering and relative gaps while removing category-wide inflation. Changing any yellow player-rating cell therefore triggers a fresh normalization and, after sync, a complete 80,000-simulation repricing.
 
 - Use `Rating Normalization` to compare every original and adjusted value.
 - If changing a player later, evaluate them relative to this group: 5 is group average, not average recreational basketball ability.
+- You do not need to rerun the workbook-building script or manually edit the normalization tab after a rating change.
 - After material rating changes, increment `MODEL_VERSION`, refresh the website, and avoid changing already accepted ticket lines.
 - Confidence controls projection volatility; it does not mean talent level.
 

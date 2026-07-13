@@ -17,10 +17,74 @@ function doGet(e) {
 function doPost(e) {
   try {
     var payload = JSON.parse(e.postData.contents || "{}");
-    if (payload.action !== "placeBet") return json_({ ok: false, error: "Unknown action" });
-    return json_(placeBet_(payload.ticket));
+    if (payload.action === "placeBet") return json_(placeBet_(payload.ticket));
+    if (payload.action === "registerParticipant") return json_(registerParticipant_(payload.participant));
+    return json_({ ok: false, error: "Unknown action" });
   } catch (error) {
     return json_({ ok: false, error: String(error && error.message || error) });
+  }
+}
+
+function registerParticipant_(name) {
+  var participant = String(name || "").trim();
+  if (!participant || participant.length > 30) throw new Error("Enter a participant name between 1 and 30 characters");
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var sheet = sheet_("Participants");
+    var rows = rows_("Participants");
+    var existing = rows.find(function(row) { return String(row.Bettor || "").trim().toLowerCase() === participant.toLowerCase(); });
+    if (existing) {
+      if (!bool_(existing["Active?"])) throw new Error("This participant is inactive; ask the organizer");
+      return { ok: true, participant: String(existing.Bettor).trim(), existing: true };
+    }
+    sheet.appendRow([participant, true, Number(getConfig_().STARTING_UNITS || 100), "Registered from website"]);
+    SpreadsheetApp.flush();
+    return { ok: true, participant: participant, existing: false };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu("Bachelor Book")
+    .addItem("Delete a bet", "deleteBetPrompt")
+    .addToUi();
+}
+
+function deleteBetPrompt() {
+  var ui = SpreadsheetApp.getUi();
+  var response = ui.prompt("Delete a bet", "Paste the exact Bet ID from the Bets tab. This permanently removes the ticket and all of its legs.", ui.ButtonSet.OK_CANCEL);
+  if (response.getSelectedButton() !== ui.Button.OK) return;
+  var betId = String(response.getResponseText() || "").trim();
+  if (!betId) { ui.alert("No Bet ID was entered."); return; }
+  var confirmation = ui.alert("Confirm permanent deletion", "Delete bet " + betId + " and refund its stake through the recalculated ledger?", ui.ButtonSet.YES_NO);
+  if (confirmation !== ui.Button.YES) return;
+  var result = deleteBetById_(betId);
+  ui.alert(result.deleted ? "Bet deleted. The website will update on its next sync." : "No matching Bet ID was found.");
+}
+
+function deleteBetById_(betId) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var deleted = false;
+    [["Bet Legs", "Bet ID"], ["Bets", "Bet ID"]].forEach(function(target) {
+      var sheet = sheet_(target[0]);
+      if (sheet.getLastRow() < 2) return;
+      var values = sheet.getDataRange().getValues();
+      var idColumn = values[0].indexOf(target[1]);
+      for (var row = values.length - 1; row >= 1; row--) {
+        if (String(values[row][idColumn]).trim() === betId) {
+          sheet.deleteRow(row + 1);
+          deleted = true;
+        }
+      }
+    });
+    SpreadsheetApp.flush();
+    return { deleted: deleted };
+  } finally {
+    lock.releaseLock();
   }
 }
 
@@ -61,6 +125,24 @@ function slug_(value) {
   return String(value).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }
 
+function normalizePlayers_(players) {
+  var skills = ["scoring", "shooting", "playmaking", "defense", "rebounding", "stamina"];
+  var values = {};
+  skills.forEach(function(skill) {
+    var mean = players.reduce(function(sum, player) { return sum + Number(player[skill] || 5); }, 0) / players.length;
+    values[skill] = players.map(function(player) { return Math.max(1, Math.min(10, Number(player[skill] || 5) - mean + 5)); });
+  });
+  return players.map(function(player, index) {
+    skills.forEach(function(skill) { player[skill] = values[skill][index]; });
+    player.overall = skills.reduce(function(sum, skill) { return sum + player[skill]; }, 0) / skills.length;
+    player.modelOverall = player.overall * .35 + player.scoring * .2 + player.shooting * .1 + player.playmaking * .1 + player.defense * .15 + player.rebounding * .07 + player.stamina * .03;
+    player.modelOffense = player.scoring * .45 + player.shooting * .25 + player.playmaking * .2 + player.overall * .1;
+    player.modelDefense = player.defense * .6 + player.rebounding * .25 + player.stamina * .15;
+    player.propUsage = (player.scoring + player.playmaking) / 20;
+    return player;
+  });
+}
+
 function serialize_(value) {
   if (Object.prototype.toString.call(value) === "[object Date]") return value.toISOString();
   return value;
@@ -93,6 +175,7 @@ function getState_() {
       modelDefense: Number(row["Model Defense"] || 5), propUsage: Number(row["Prop Usage"] || 0.5), volatility: Number(row.Volatility || 1)
     };
   });
+  players = normalizePlayers_(players);
   var assignments = [];
   rows_("Team Assignments").forEach(function(row) {
     var names = row.Player === "Berler/Jason" ? ["Berler", "Jason"] : [row.Player];
@@ -105,7 +188,7 @@ function getState_() {
   });
   var schedule = rows_("Schedule & Results").map(function(row) {
     return {
-      gameId: row["Game ID"], status: row.Status || "UPCOMING",
+      gameId: row["Game ID"], team1: row["Team 1"] || "", team2: row["Team 2"] || "", bye: row.Bye || "", status: row.Status || "UPCOMING",
       team1Score: numberOrNull_(row["Team 1 Score"]), team2Score: numberOrNull_(row["Team 2 Score"]),
       final: bool_(row["Final?"]), bettingLocked: bool_(row["Betting Locked?"]), updatedAt: row["Updated At"] || ""
     };

@@ -6,9 +6,9 @@ const community: CommunityState = {
   config: { BRAD_PLAYS: false }, loadedAt: "2026-01-01", participants: ["Ben"],
   players: [], assignments: [],
   schedule: [
-    { gameId: "game-1", status: "FINAL", team1Score: 21, team2Score: 17, final: true, bettingLocked: true, updatedAt: "" },
-    { gameId: "game-2", status: "UPCOMING", team1Score: null, team2Score: null, final: false, bettingLocked: false, updatedAt: "" },
-    { gameId: "game-3", status: "UPCOMING", team1Score: null, team2Score: null, final: false, bettingLocked: false, updatedAt: "" },
+    { gameId: "game-1", team1: "Team A", team2: "Team B", bye: "Team C", status: "FINAL", team1Score: 21, team2Score: 17, final: true, bettingLocked: true, updatedAt: "" },
+    { gameId: "game-2", team1: "Team B", team2: "Team C", bye: "Team A", status: "UPCOMING", team1Score: null, team2Score: null, final: false, bettingLocked: false, updatedAt: "" },
+    { gameId: "game-3", team1: "Team C", team2: "Team A", bye: "Team B", status: "UPCOMING", team1Score: null, team2Score: null, final: false, bettingLocked: false, updatedAt: "" },
   ],
   boxScores: [{ gameId: "game-1", scenario: "Brad Out", playerId: "alex", playerName: "Alex", teamId: "Team A", played: true, points: 8, rebounds: 4, assists: 2, threes: 2 }],
   bets: [{ betId: "b1", submittedAt: "2026-01-01", bettor: "Ben", stake: 10, decimalOdds: 2, americanOdds: 100, potentialReturn: 20, scenario: "Brad Out", status: "pending", settledReturn: 0, profit: 0, modelVersion: 2, eventId: "event" }],
@@ -26,5 +26,6 @@ describe("shared Sheet state", () => {
     const tickets = sharedTickets(community);
     expect(tickets[0].participant).toBe("Ben");
     expect(tickets[0].legs[0].gameId).toBe("game-1");
+    expect(tickets[0].centralized).toBe(true);
   });
 });
