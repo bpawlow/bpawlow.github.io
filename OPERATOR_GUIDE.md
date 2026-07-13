@@ -82,6 +82,8 @@ The Apps Script will grade affected legs and tickets during the next sync. The w
 
 The board offers winner, spread, and full-game total markets. Team totals are intentionally excluded: in a first-to-21 format, every winning team finishes on 21 or 22, making its team total largely a duplicate of the moneyline and unusually sensitive to whether the final basket is worth one or two points. Previously accepted team-total tickets remain supported by settlement logic.
 
+All straight markets—including game lines and player props—use a fixed 4.76% two-sided overround after the simulation calculates fair probabilities. A true 50/50 selection therefore displays at approximately `-110` on each side. Parlays are priced from their joint simulated outcomes so correlation is included, then receive a separate parlay margin that starts at 7.5% and increases modestly for additional legs.
+
 ## Team display names
 
 Edit team names in one place only: the `Value` cells beside `TEAM_A_NAME`, `TEAM_B_NAME`, and `TEAM_C_NAME` on `App Config`. If these rows do not yet exist, the latest Apps Script creates them during the next website sync.

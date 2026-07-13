@@ -16,7 +16,9 @@ import { clamp, offeredPrice } from "./odds";
 
 const ctx: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobalScope;
 const SAMPLE_COUNT = 80_000;
-const STRAIGHT_HOLD = 0.045;
+// Standard two-sided sportsbook vig: a fair 50/50 market prices near -110/-110.
+// Multiplying both fair probabilities by 1.047619 creates a 4.76% overround.
+const STRAIGHT_VIG = 0.047619;
 const PARLAY_BASE_HOLD = 0.075;
 
 interface RosterPlayer {
@@ -248,7 +250,7 @@ function buildMarkets(
   ) => {
     [first, second].forEach((selection, index) => {
       const probability = fairProbability(pair[index]);
-      const price = offeredPrice(probability, STRAIGHT_HOLD);
+      const price = offeredPrice(probability, STRAIGHT_VIG);
       const market: MarketSelection = { ...base, ...selection, fairProbability: probability, ...price };
       markets.push(market);
       eventOutcomes.set(market.id, pair[index]);
