@@ -123,10 +123,13 @@ config_rows = [
     ("STARTING_UNITS", 100, "Starting bankroll for each participant.", "Leave unchanged"),
     ("APPS_SCRIPT_URL", "", "Paste the deployed Google Apps Script /exec URL here.", "Organizer setup"),
     ("AUTO_REFRESH_SECONDS", 30, "How often the app checks for shared results and leaderboard changes.", "Organizer"),
+    ("TEAM_A_NAME", "Team A", "Central display name used throughout the Sheet and website.", "Organizer"),
+    ("TEAM_B_NAME", "Team B", "Central display name used throughout the Sheet and website.", "Organizer"),
+    ("TEAM_C_NAME", "Team C", "Central display name used throughout the Sheet and website.", "Organizer"),
 ]
 for item in config_rows:
     config.append(item)
-for cell in (config["B2"], config["B3"], config["B7"], config["B8"]):
+for cell in (config["B2"], config["B3"], config["B7"], config["B8"], config["B9"], config["B10"], config["B11"]):
     cell.fill = PatternFill("solid", fgColor=YELLOW)
 add_validation(config, '"TRUE,FALSE"', "B2:B3")
 

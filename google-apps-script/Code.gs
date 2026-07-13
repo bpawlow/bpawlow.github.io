@@ -162,7 +162,54 @@ function getConfig_() {
   return config;
 }
 
+function canonicalGame_(gameId) {
+  var games = {
+    "game-1": { team1: "Team A", team2: "Team B", bye: "Team C" },
+    "game-2": { team1: "Team B", team2: "Team C", bye: "Team A" },
+    "game-3": { team1: "Team C", team2: "Team A", bye: "Team B" }
+  };
+  return games[String(gameId || "")] || null;
+}
+
+function syncTeamNames_() {
+  var configSheet = sheet_("App Config");
+  var config = getConfig_();
+  var scheduleRows = rows_("Schedule & Results");
+  var firstGame = scheduleRows.find(function(row) { return row["Game ID"] === "game-1"; }) || {};
+  var defaults = {
+    TEAM_A_NAME: firstGame["Team 1"] || "Team A",
+    TEAM_B_NAME: firstGame["Team 2"] || "Team B",
+    TEAM_C_NAME: firstGame.Bye || "Team C"
+  };
+  ["TEAM_A_NAME", "TEAM_B_NAME", "TEAM_C_NAME"].forEach(function(key) {
+    if (config[key] === undefined || String(config[key]).trim() === "") {
+      configSheet.appendRow([key, defaults[key], "Central display name used throughout the Sheet and website.", "Organizer"]);
+      config[key] = defaults[key];
+    }
+  });
+
+  var names = {
+    "Team A": String(config.TEAM_A_NAME).trim(),
+    "Team B": String(config.TEAM_B_NAME).trim(),
+    "Team C": String(config.TEAM_C_NAME).trim()
+  };
+  var scheduleSheet = sheet_("Schedule & Results");
+  var values = scheduleSheet.getDataRange().getValues();
+  if (!values.length) return;
+  var columns = index_(values[0]);
+  for (var row = 1; row < values.length; row++) {
+    var game = canonicalGame_(values[row][columns["Game ID"]]);
+    if (!game) continue;
+    var nextNames = [names[game.team1], names[game.team2], names[game.bye]];
+    var currentNames = [values[row][columns["Team 1"]], values[row][columns["Team 2"]], values[row][columns.Bye]];
+    if (currentNames.join("\u0000") !== nextNames.join("\u0000")) {
+      scheduleSheet.getRange(row + 1, columns["Team 1"] + 1, 1, 3).setValues([nextNames]);
+    }
+  }
+}
+
 function getState_() {
+  syncTeamNames_();
   settleBets_();
   var config = getConfig_();
   var players = rowsFromHeader_("Quick Player Ratings", "Player").filter(function(row) { return row.Player; }).map(function(row) {
@@ -237,8 +284,9 @@ function settleBets_() {
 
   var schedule = {};
   rows_("Schedule & Results").forEach(function(row) {
+    var game = canonicalGame_(row["Game ID"]);
     schedule[row["Game ID"]] = {
-      team1: row["Team 1"], team2: row["Team 2"], score1: numberOrNull_(row["Team 1 Score"]),
+      team1: game ? game.team1 : row["Team 1"], team2: game ? game.team2 : row["Team 2"], score1: numberOrNull_(row["Team 1 Score"]),
       score2: numberOrNull_(row["Team 2 Score"]), final: bool_(row["Final?"])
     };
   });

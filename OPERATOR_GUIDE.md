@@ -80,17 +80,11 @@ The Apps Script will grade affected legs and tickets during the next sync. The w
 
 ## Team display names
 
-The `Team 1`, `Team 2`, and `Bye` values in `Schedule & Results` are the shared display names. Updating those cells updates game tabs, matchup headers, team-grouped player props, market labels, standings, and Tournament cards after the next sync.
+Edit team names in one place only: the `Value` cells beside `TEAM_A_NAME`, `TEAM_B_NAME`, and `TEAM_C_NAME` on `App Config`. If these rows do not yet exist, the latest Apps Script creates them during the next website sync.
 
-Enter each name consistently in these positions:
+The script copies those central names into every `Team 1`, `Team 2`, and `Bye` position in `Schedule & Results`. The website then uses them in game tabs, matchup headers, markets, standings, Tournament cards, and My Bets. Existing tickets keep their original odds and canonical team identity, but display the current team name.
 
-| Canonical team | Game 1 | Game 2 | Game 3 |
-| --- | --- | --- | --- |
-| Team A | `Team 1` | `Bye` | `Team 2` |
-| Team B | `Team 2` | `Team 1` | `Bye` |
-| Team C | `Bye` | `Team 2` | `Team 1` |
-
-Do not rename Team A/B/C in `Team Assignments`; those values are stable internal identifiers connecting players to the pricing model. Existing accepted tickets retain their original labels, while newly generated markets use the updated names.
+Do not manually maintain the repeated team-name cells in `Schedule & Results`, because the script will synchronize them from `App Config`. Do not rename Team A/B/C in `Team Assignments`; those values are stable internal identifiers connecting players to the pricing and settlement models.
 
 ## Leaderboards
 

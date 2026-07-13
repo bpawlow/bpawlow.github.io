@@ -57,6 +57,12 @@ function replaceTeamLabels(value: string, names: TeamNames): string {
   return (["Team A", "Team B", "Team C"] as TeamId[]).reduce((result, team) => result.split(team).join(names[team]), value);
 }
 
+function canonicalizeTeamLabels(value: string, names: TeamNames): string {
+  return (["Team A", "Team B", "Team C"] as TeamId[])
+    .sort((left, right) => names[right].length - names[left].length)
+    .reduce((result, team) => result.split(names[team]).join(team), value);
+}
+
 function localizedSummary(summary: SimulationSummary, names: TeamNames): SimulationSummary {
   return {
     ...summary,
@@ -228,7 +234,7 @@ function Sportsbook({ data, summary, teamNames, gameId, setGameId, selections, t
   );
 }
 
-function TicketsView({ tickets, results }: { tickets: Ticket[]; results: PersistedState["results"] }): ReactElement {
+function TicketsView({ tickets, results, teamNames }: { tickets: Ticket[]; results: PersistedState["results"]; teamNames: TeamNames }): ReactElement {
   if (!tickets.length) return <div className="empty-page"><span>⌁</span><h2>No tickets yet</h2><p>Your straight bets and parlays will appear here.</p></div>;
   return (
     <div className="page-stack">
@@ -236,7 +242,7 @@ function TicketsView({ tickets, results }: { tickets: Ticket[]; results: Persist
       {tickets.slice().reverse().map((ticket) => (
         <article className="ticket-card" key={ticket.id}>
           <header><div><span className={`status ${ticket.status}`}>{ticket.status}</span><strong>{ticket.legs.length > 1 ? `${ticket.legs.length}-leg parlay` : "Straight bet"}</strong></div><time>{new Date(ticket.createdAt).toLocaleString()}</time></header>
-          <div className="ticket-legs">{ticket.legs.map((leg) => <div key={leg.marketId}><span className={`grade grade-${gradeLeg(leg, results)}`}></span><p><strong>{leg.label}</strong><small>{gradeLeg(leg, results)}</small></p></div>)}</div>
+          <div className="ticket-legs">{ticket.legs.map((leg) => <div key={leg.marketId}><span className={`grade grade-${gradeLeg(leg, results)}`}></span><p><strong>{replaceTeamLabels(leg.label, teamNames)}</strong><small>{gradeLeg(leg, results)}</small></p></div>)}</div>
           <footer><span>Stake <b>{money(ticket.stake)}</b></span><span>Odds <b>{formatAmerican(ticket.americanOdds)}</b></span><span>{ticket.status === "won" ? "Returned" : "To return"} <b>{money(ticket.status === "won" ? ticket.settledReturn : ticket.potentialReturn)}</b></span></footer>
         </article>
       ))}
@@ -378,7 +384,12 @@ export default function App(): ReactElement {
   const submittingRef = useRef(false);
   const registeringRef = useRef(false);
 
-  const teamNameSignature = JSON.stringify(community?.schedule.map((row) => [row.gameId, row.team1, row.team2, row.bye]) ?? []);
+  const teamNameSignature = JSON.stringify([
+    community?.config.TEAM_A_NAME,
+    community?.config.TEAM_B_NAME,
+    community?.config.TEAM_C_NAME,
+    community?.schedule.map((row) => [row.gameId, row.team1, row.team2, row.bye]) ?? [],
+  ]);
   const teamNames = useMemo(() => {
     const names = { ...DEFAULT_TEAM_NAMES };
     for (const row of community?.schedule ?? []) {
@@ -388,6 +399,14 @@ export default function App(): ReactElement {
       if (row.team2?.trim()) names[game.team2] = row.team2.trim();
       if (row.bye?.trim()) names[game.bye] = row.bye.trim();
     }
+    const configuredNames: Array<[TeamId, unknown]> = [
+      ["Team A", community?.config.TEAM_A_NAME],
+      ["Team B", community?.config.TEAM_B_NAME],
+      ["Team C", community?.config.TEAM_C_NAME],
+    ];
+    configuredNames.forEach(([team, value]) => {
+      if (typeof value === "string" && value.trim()) names[team] = value.trim();
+    });
     return names;
   }, [teamNameSignature]);
 
@@ -464,7 +483,7 @@ export default function App(): ReactElement {
     setSummary(null);
     setSelections([]);
     setParlayPrice(null);
-    setLoadingText(`Simulating 80,000 ${persisted.scenario} tournaments…`);
+    setLoadingText("Simulating 80,000 tournament outcomes…");
     client.initialize(data, persisted.scenario).then((next) => setSummary(localizedSummary(next, teamNames))).catch((reason) => setError(reason instanceof Error ? reason.message : "Simulation failed"));
     return () => client.destroy();
   }, [data, persisted.scenario, teamNameSignature]);
@@ -511,7 +530,7 @@ export default function App(): ReactElement {
       id: crypto.randomUUID(), createdAt: new Date().toISOString(), participant: persisted.participant,
       scenario: persisted.scenario, stake: stakeNumber, decimalOdds: price.decimalOdds, americanOdds: price.americanOdds,
       potentialReturn: Number((stakeNumber * price.decimalOdds).toFixed(2)), fairProbability: price.fairProbability,
-      legs: selections.map((market) => ({ marketId: market.id, gameId: market.gameId, kind: market.kind, subject: market.subject, playerId: market.playerId, teamId: market.teamId, stat: market.stat, side: market.side, line: market.line, label: market.label, odds: market.decimalOdds })),
+      legs: selections.map((market) => ({ marketId: market.id, gameId: market.gameId, kind: market.kind, subject: canonicalizeTeamLabels(market.subject, teamNames), playerId: market.playerId, teamId: market.teamId, stat: market.stat, side: market.side, line: market.line, label: canonicalizeTeamLabels(market.label, teamNames), odds: market.decimalOdds })),
       status: "pending", settledReturn: 0, centralized: Boolean(persisted.sharedApiUrl),
     };
     try {
@@ -617,7 +636,7 @@ export default function App(): ReactElement {
       ) : (
         <main className={`main-layout ${tab === "sportsbook" ? "with-slip" : ""}`}>
           {tab === "sportsbook" && <Sportsbook data={data} summary={summary} teamNames={teamNames} gameId={gameId} setGameId={setGameId} selections={selections} toggleMarket={toggleMarket} />}
-          {tab === "bets" && <TicketsView tickets={settledTickets} results={officialResults} />}
+          {tab === "bets" && <TicketsView tickets={settledTickets} results={officialResults} teamNames={teamNames} />}
           {tab === "leaderboard" && <LeaderboardView community={community} results={officialResults} scenario={persisted.scenario} />}
           {tab === "tournament" && <TournamentView data={data} scenario={persisted.scenario} teamNames={teamNames} results={officialResults} readOnly={Boolean(community)} onResults={(results) => setPersisted((current) => ({ ...current, results }))} />}
           {tab === "rules" && <RulesView />}
