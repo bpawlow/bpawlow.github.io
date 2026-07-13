@@ -49,7 +49,48 @@ function registerParticipant_(name) {
 function onOpen() {
   SpreadsheetApp.getUi().createMenu("Bachelor Book")
     .addItem("Delete a bet", "deleteBetPrompt")
+    .addItem("Remove a participant", "removeParticipantPrompt")
     .addToUi();
+}
+
+function removeParticipantPrompt() {
+  var ui = SpreadsheetApp.getUi();
+  var response = ui.prompt("Remove a participant", "Enter the exact participant name from the Participants tab. This works only when they have no bets.", ui.ButtonSet.OK_CANCEL);
+  if (response.getSelectedButton() !== ui.Button.OK) return;
+  var participant = String(response.getResponseText() || "").trim();
+  if (!participant) { ui.alert("No participant name was entered."); return; }
+  try {
+    var result = removeParticipantByName_(participant);
+    ui.alert(result.removed ? "Participant removed. The website will update on its next sync." : "No matching participant was found.");
+  } catch (error) {
+    ui.alert(String(error && error.message || error));
+  }
+}
+
+function removeParticipantByName_(participant) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var normalized = participant.toLowerCase();
+    var matchingBets = rows_("Bets").some(function(row) {
+      return String(row.Bettor || "").trim().toLowerCase() === normalized;
+    });
+    if (matchingBets) throw new Error("This participant has bets. Delete those bets first, then remove the participant.");
+
+    var sheet = sheet_("Participants");
+    var values = sheet.getDataRange().getValues();
+    var bettorColumn = values[0].indexOf("Bettor");
+    for (var row = values.length - 1; row >= 1; row--) {
+      if (String(values[row][bettorColumn] || "").trim().toLowerCase() === normalized) {
+        sheet.deleteRow(row + 1);
+        SpreadsheetApp.flush();
+        return { removed: true };
+      }
+    }
+    return { removed: false };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function deleteBetPrompt() {

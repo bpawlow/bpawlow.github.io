@@ -109,6 +109,12 @@ The spreadsheet contains equivalent `Betting Leaderboard` and `Player Leaderboar
 - Do not manually alter `Bets` or `Bet Legs` during play unless correcting an organizer-confirmed data error.
 - If a result is corrected, the settlement pass recomputes ticket states from the official records.
 
+## Removing a test participant
+
+In the Google Sheet, open **Bachelor Book → Remove a participant**, enter the exact name, and confirm. The organizer action removes the row from `Participants`, but only if that person has no bets. The website removes them from the leaderboard on its next sync.
+
+If the participant has already submitted a test bet, use **Bachelor Book → Delete a bet** first. Then run **Remove a participant**. This preserves the betting ledger and prevents a participant with historical bets from being silently erased.
+
 ### Permanently deleting a mistaken bet
 
 Use the organizer-only menu in the Google Sheet:
