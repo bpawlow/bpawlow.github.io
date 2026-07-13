@@ -93,11 +93,12 @@ function MarketPair({ pair, selectedIds, onToggle }: {
   selectedIds: Set<string>;
   onToggle: (market: MarketSelection) => void;
 }): ReactElement {
+  const marketName = pair[0].kind === "player-prop" && pair[0].stat ? STAT_LABELS[pair[0].stat] : pair[0].subject;
   return (
     <div className="market-row">
       <div className="market-name">
-        <span>{pair[0].subject}</span>
-        {pair[0].stat && <small>{STAT_LABELS[pair[0].stat]}</small>}
+        <span>{marketName}</span>
+        {pair[0].kind !== "player-prop" && pair[0].stat && <small>{STAT_LABELS[pair[0].stat]}</small>}
       </div>
       <div className="odds-pair">
         {pair.map((market) => <OddsButton key={market.id} market={market} selected={selectedIds.has(market.id)} onClick={() => onToggle(market)} />)}
