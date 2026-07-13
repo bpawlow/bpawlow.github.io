@@ -47,6 +47,7 @@ h1, h2 { font-family: "Barlow Condensed", sans-serif; text-transform: uppercase;
 .status-strip > div:first-child { display: flex; align-items: center; gap: 7px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
 .status-strip small { font-weight: 400; text-transform: none; }
 .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 4px rgba(61,214,165,.1); }
+.live-dot.error-dot { background: var(--orange); box-shadow: 0 0 0 4px rgba(255,90,68,.1); }
 .status-strip > button { justify-self: end; color: var(--muted); border: 0; background: none; font-size: 11px; cursor: pointer; }
 .wager-progress { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; text-transform: uppercase; font-weight: 700; letter-spacing: .04em; }
 .wager-progress div { height: 5px; background: #292b32; border-radius: 10px; overflow: hidden; }
@@ -177,6 +178,8 @@ h1, h2 { font-family: "Barlow Condensed", sans-serif; text-transform: uppercase;
 .final-tag { color: var(--green); background: rgba(61,214,165,.1); }.pending-tag { color: #f3c068; background: rgba(243,192,104,.1); }
 .result-editor { border-top: 1px solid var(--line); padding: 18px; }
 .score-editor { display: flex; justify-content: center; align-items: end; gap: 16px; }
+.score-editor-fields { border: 0; padding: 0; margin: 0; display: flex; justify-content: center; align-items: end; gap: 16px; }
+.score-editor-fields:disabled, input:disabled, select:disabled { opacity: .7; cursor: not-allowed; }
 .score-input { display: flex; flex-direction: column; text-align: center; gap: 6px; font-size: 10px; color: var(--muted); }
 .score-input input { width: 75px; height: 52px; text-align: center; border: 1px solid #3b3e47; background: #101115; border-radius: 7px; color: var(--ink); font-family: "Barlow Condensed"; font-size: 27px; font-weight: 800; }
 .final-check { margin-left: 15px; font-size: 11px; color: var(--muted); padding-bottom: 15px; }
@@ -195,6 +198,18 @@ td input { width: 52px; background: #101115; color: var(--ink); border: 1px soli
 .rule-grid p, .method-card p { color: #aeb0b8; font-size: 11px; line-height: 1.65; }
 .method-card { padding: 24px; margin: 5px 0 0; }
 .method-card h2 { font-size: 28px; margin: 4px 0 8px; }
+
+.bettor-head, .bettor-row { display: grid; grid-template-columns: minmax(170px, 1fr) repeat(4, 90px); align-items: center; padding: 11px 18px; text-align: right; }
+.bettor-head, .player-head { color: var(--muted); font-size: 8px; letter-spacing: .08em; text-transform: uppercase; }
+.bettor-head span:first-child, .bettor-row span:first-child, .player-head span:first-child, .player-leader-row span:first-child { text-align: left; }
+.bettor-row { min-height: 55px; border-top: 1px solid #292b32; font-size: 11px; }
+.bettor-row > span:first-child, .player-leader-row > span:first-child { display: flex; align-items: center; gap: 12px; font-weight: 700; }
+.bettor-row > span:first-child b, .player-leader-row > span:first-child b { color: var(--muted); width: 14px; }
+.bettor-row > strong:last-child { color: var(--green); font-family: "Barlow Condensed"; font-size: 18px; }
+.player-head, .player-leader-row { display: grid; grid-template-columns: minmax(170px, 1fr) repeat(6, 65px); align-items: center; padding: 11px 18px; text-align: center; }
+.player-leader-row { min-height: 52px; border-top: 1px solid #292b32; font-size: 11px; }
+.player-leader-row > strong { color: var(--green); }
+.leaderboard-empty { color: var(--muted); text-align: center; font-size: 11px; padding: 28px; margin: 0; border-top: 1px solid var(--line); }
 
 .modal-backdrop { position: fixed; inset: 0; background: rgba(4,5,7,.82); z-index: 100; display: grid; place-items: center; padding: 20px; backdrop-filter: blur(8px); }
 .profile-modal { width: min(480px, 100%); position: relative; background: #191b21; border: 1px solid #3a3d47; border-radius: 14px; padding: 30px; box-shadow: 0 30px 90px #000; }
@@ -226,7 +241,7 @@ td input { width: 52px; background: #101115; color: var(--ink); border: 1px soli
 
 @media (max-width: 980px) {
   .topbar { grid-template-columns: 1fr auto; height: 66px; }
-  .topbar nav { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; height: 58px; background: #15171c; border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; }
+  .topbar nav { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; height: 58px; background: #15171c; border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; }
   .topbar nav button.active::after { top: 0; bottom: auto; }
   .brand small, .scenario-toggle > span { display: none; }
   .main-layout.with-slip { grid-template-columns: 1fr; }
@@ -263,10 +278,14 @@ td input { width: 52px; background: #101115; color: var(--ink); border: 1px soli
   .market-name small { margin: 0; }
   .odds-button { min-height: 40px; }
   .standings-head, .standing-row { grid-template-columns: minmax(110px, 1fr) repeat(5, 37px); padding-left: 10px; padding-right: 10px; }
+  .bettor-head, .bettor-row { grid-template-columns: minmax(115px, 1fr) repeat(4, 54px); padding-left: 10px; padding-right: 10px; }
+  .player-head, .player-leader-row { grid-template-columns: minmax(110px, 1fr) repeat(6, 39px); padding-left: 10px; padding-right: 10px; }
+  .bettor-row > span:first-child, .player-leader-row > span:first-child { gap: 6px; }
   .standing-row .team-pill { font-size: 13px; }
   .result-card summary { grid-template-columns: 50px 1fr auto; padding: 8px 10px; }
   .result-card summary strong { font-size: 16px; }
   .score-editor { flex-wrap: wrap; }
+  .score-editor-fields { flex-wrap: wrap; }
   .final-check { width: 100%; text-align: center; padding: 0; margin: 5px 0; }
   .rule-grid { grid-template-columns: 1fr; }
   .rule-grid section { min-height: 150px; }

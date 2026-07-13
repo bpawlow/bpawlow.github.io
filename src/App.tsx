@@ -3,6 +3,7 @@ import type { ChangeEvent, ReactElement } from "react";
 import "./App.css";
 import { exportState, importState, loadState, saveState } from "./data/persistence";
 import { loadBasketballData, sheetPublicUrl } from "./data/googleSheets";
+import { isGameLocked, loadCommunityState, resultsFromCommunity, sharedTickets, submitSharedTicket } from "./data/sharedApi";
 import { formatAmerican, money } from "./model/odds";
 import { gradeLeg, ledger, settleTickets } from "./model/settlement";
 import { SimulationClient } from "./model/simulationClient";
@@ -10,6 +11,7 @@ import { calculateStandings } from "./model/standings";
 import { GAMES, TEAM_COLORS } from "./types";
 import type {
   BasketballData,
+  CommunityState,
   GameId,
   GameResult,
   MarketSelection,
@@ -23,7 +25,7 @@ import type {
   Ticket,
 } from "./types";
 
-type Tab = "sportsbook" | "bets" | "tournament" | "rules";
+type Tab = "sportsbook" | "bets" | "leaderboard" | "tournament" | "rules";
 
 const STAT_LABELS: Record<StatKey, string> = {
   points: "Points", rebounds: "Rebounds", assists: "Assists", threes: "3PM",
@@ -208,11 +210,12 @@ function ScoreInput({ value, onChange, label }: { value: number | null; onChange
   return <label className="score-input"><span>{label}</span><input type="number" min="0" max="22" value={value ?? ""} onChange={(event) => onChange(event.target.value === "" ? null : Number(event.target.value))} /></label>;
 }
 
-function TournamentView({ data, scenario, results, onResults }: {
+function TournamentView({ data, scenario, results, onResults, readOnly = false }: {
   data: BasketballData;
   scenario: Scenario;
   results: PersistedState["results"];
   onResults: (results: PersistedState["results"]) => void;
+  readOnly?: boolean;
 }): ReactElement {
   const standings = calculateStandings(results);
   const updateGame = (gameId: GameId, patch: Partial<GameResult>) => onResults({ ...results, [gameId]: { ...results[gameId], ...patch } });
@@ -223,7 +226,7 @@ function TournamentView({ data, scenario, results, onResults }: {
   };
   return (
     <div className="page-stack">
-      <div className="page-heading"><span className="eyebrow">Round robin</span><h1>Tournament center</h1><p>Enter official results on the scorekeeper device to settle locally stored tickets.</p></div>
+      <div className="page-heading"><span className="eyebrow">Round robin</span><h1>Tournament center</h1><p>{readOnly ? "Official scores and box scores are synchronized from the shared Google Sheet." : "Enter official results on the scorekeeper device to settle locally stored tickets."}</p></div>
       <section className="standings-card">
         <div className="section-title"><div><span className="eyebrow">Live table</span><h2>Standings</h2></div></div>
         <div className="standings-head"><span>Team</span><span>W</span><span>L</span><span>PF</span><span>PA</span><span>DIFF</span></div>
@@ -238,22 +241,59 @@ function TournamentView({ data, scenario, results, onResults }: {
             <summary><span>Game {game.number}</span><strong>{game.team1} {result.team1Score ?? "–"} <i>vs</i> {result.team2Score ?? "–"}</strong><span className={result.final ? "final-tag" : "pending-tag"}>{result.final ? "Final" : "Open"}</span></summary>
             <div className="result-editor">
               <div className="score-editor">
+                <fieldset disabled={readOnly} className="score-editor-fields">
                 <ScoreInput label={game.team1} value={result.team1Score} onChange={(team1Score) => updateGame(game.id, { team1Score, final: false })} />
                 <b>–</b>
                 <ScoreInput label={game.team2} value={result.team2Score} onChange={(team2Score) => updateGame(game.id, { team2Score, final: false })} />
                 <label className="final-check"><input type="checkbox" checked={result.final} disabled={result.team1Score === null || result.team2Score === null} onChange={(event) => updateGame(game.id, { final: event.target.checked })} /> Mark final</label>
+                </fieldset>
               </div>
               <p className="scorekeeper-note">Points use ones-and-twos scoring. A made three counts as 2 points and 1 made three.</p>
               <div className="box-score-wrap"><table><thead><tr><th>Player</th><th>PTS</th><th>REB</th><th>AST</th><th>3PM</th></tr></thead><tbody>
                 {roster.map((assignment) => {
                   const box = result.playerStats[assignment.playerId] ?? { playerId: assignment.playerId, points: 0, rebounds: 0, assists: 0, threes: 0 };
-                  return <tr key={`${game.id}-${assignment.playerId}`}><td>{assignment.playerName}{assignment.rotationShare < 1 ? " (sub)" : ""}</td>{(["points", "rebounds", "assists", "threes"] as const).map((field) => <td key={field}><input type="number" min="0" value={box[field]} onChange={(event) => updatePlayer(game.id, assignment.playerId, field, Number(event.target.value))} /></td>)}</tr>;
+                  return <tr key={`${game.id}-${assignment.playerId}`}><td>{assignment.playerName}{assignment.rotationShare < 1 ? " (sub)" : ""}</td>{(["points", "rebounds", "assists", "threes"] as const).map((field) => <td key={field}><input disabled={readOnly} type="number" min="0" value={box[field]} onChange={(event) => updatePlayer(game.id, assignment.playerId, field, Number(event.target.value))} /></td>)}</tr>;
                 })}
               </tbody></table></div>
             </div>
           </details>
         );
       })}
+    </div>
+  );
+}
+
+function LeaderboardView({ community, results, scenario }: { community: CommunityState | null; results: PersistedState["results"]; scenario: Scenario }): ReactElement {
+  if (!community) return <div className="empty-page"><span>◎</span><h2>Shared leaderboard not connected</h2><p>Connect the Google Apps Script URL from your Player Card to activate the party-wide standings.</p></div>;
+  const centralized = settleTickets(sharedTickets(community), results);
+  const names = new Set([...community.participants, ...centralized.map((ticket) => ticket.participant)]);
+  const bettors = [...names].map((name) => {
+    const tickets = centralized.filter((ticket) => ticket.participant === name);
+    return { name, tickets: tickets.length, ...ledger(tickets) };
+  }).sort((a, b) => b.available - a.available || b.profit - a.profit || a.name.localeCompare(b.name));
+
+  const players = new Map<string, { name: string; games: Set<GameId>; points: number; rebounds: number; assists: number; threes: number }>();
+  for (const box of community.boxScores.filter((row) => row.scenario === scenario && row.played)) {
+    const current = players.get(box.playerId) ?? { name: box.playerName, games: new Set<GameId>(), points: 0, rebounds: 0, assists: 0, threes: 0 };
+    current.games.add(box.gameId); current.points += box.points; current.rebounds += box.rebounds; current.assists += box.assists; current.threes += box.threes;
+    players.set(box.playerId, current);
+  }
+  const playerRows = [...players.values()].sort((a, b) => (b.points + b.rebounds + b.assists) - (a.points + a.rebounds + a.assists));
+  return (
+    <div className="page-stack">
+      <div className="page-heading"><span className="eyebrow">Live from Google Sheets</span><h1>Leaderboards</h1><p>Betting standings and tournament stat leaders refresh automatically.</p></div>
+      <section className="standings-card leaderboard-card">
+        <div className="section-title"><div><span className="eyebrow">The action</span><h2>Betting leaderboard</h2></div><span>{centralized.length} tickets</span></div>
+        <div className="bettor-head"><span>Rank / Bettor</span><span>Bets</span><span>Staked</span><span>Profit</span><span>Units</span></div>
+        {bettors.map((row, index) => <div className="bettor-row" key={row.name}><span><b>{index + 1}</b>{row.name}</span><span>{row.tickets}</span><span>{money(row.totalStaked)}</span><strong className={row.profit > 0 ? "positive" : row.profit < 0 ? "negative" : ""}>{row.profit > 0 ? "+" : ""}{money(row.profit)}</strong><strong>{money(row.available)}</strong></div>)}
+        {!bettors.length && <p className="leaderboard-empty">No centralized bets have been placed yet.</p>}
+      </section>
+      <section className="standings-card leaderboard-card">
+        <div className="section-title"><div><span className="eyebrow">Box scores</span><h2>Player leaderboard</h2></div><span>{scenario}</span></div>
+        <div className="player-head"><span>Player</span><span>GP</span><span>PTS</span><span>REB</span><span>AST</span><span>3PM</span><span>PRA</span></div>
+        {playerRows.map((row, index) => <div className="player-leader-row" key={row.name}><span><b>{index + 1}</b>{row.name}</span><span>{row.games.size}</span><strong>{row.points}</strong><span>{row.rebounds}</span><span>{row.assists}</span><span>{row.threes}</span><strong>{row.points + row.rebounds + row.assists}</strong></div>)}
+        {!playerRows.length && <p className="leaderboard-empty">Player leaders appear after official box scores are marked Played.</p>}
+      </section>
     </div>
   );
 }
@@ -278,6 +318,8 @@ function RulesView(): ReactElement {
 export default function App(): ReactElement {
   const [persisted, setPersisted] = useState<PersistedState>(() => loadState());
   const [data, setData] = useState<BasketballData | null>(null);
+  const [community, setCommunity] = useState<CommunityState | null>(null);
+  const [communityError, setCommunityError] = useState("");
   const [summary, setSummary] = useState<SimulationSummary | null>(null);
   const [loadingText, setLoadingText] = useState("Reading the live ratings…");
   const [error, setError] = useState("");
@@ -290,12 +332,51 @@ export default function App(): ReactElement {
   const [toast, setToast] = useState("");
   const [showProfile, setShowProfile] = useState(!persisted.participant);
   const clientRef = useRef<SimulationClient | null>(null);
+  const communityModelRef = useRef("");
 
-  const settledTickets = useMemo(() => settleTickets(persisted.tickets, persisted.results), [persisted.tickets, persisted.results]);
+  const officialResults = useMemo(() => resultsFromCommunity(community) ?? persisted.results, [community, persisted.results]);
+  const accountTickets = useMemo(() => {
+    if (!community) return persisted.tickets;
+    const central = sharedTickets(community).filter((ticket) => ticket.participant === persisted.participant);
+    const centralIds = new Set(central.map((ticket) => ticket.id));
+    return [...central, ...persisted.tickets.filter((ticket) => !centralIds.has(ticket.id))];
+  }, [community, persisted.participant, persisted.tickets]);
+  const settledTickets = useMemo(() => settleTickets(accountTickets, officialResults), [accountTickets, officialResults]);
   const account = useMemo(() => ledger(settledTickets), [settledTickets]);
   const requirement = Math.min(100, account.totalStaked);
 
   useEffect(() => { saveState({ ...persisted, tickets: settledTickets }); }, [persisted, settledTickets]);
+
+  useEffect(() => {
+    if (!persisted.sharedApiUrl) { setCommunity(null); setCommunityError(""); return; }
+    let cancelled = false;
+    const sync = async () => {
+      try {
+        const next = await loadCommunityState(persisted.sharedApiUrl);
+        if (!cancelled) { setCommunity(next); setCommunityError(""); }
+      } catch (reason) {
+        if (!cancelled) setCommunityError(reason instanceof Error ? reason.message : "Shared sync failed");
+      }
+    };
+    void sync();
+    const interval = window.setInterval(sync, 30_000);
+    return () => { cancelled = true; window.clearInterval(interval); };
+  }, [persisted.sharedApiUrl]);
+
+  useEffect(() => {
+    if (!community) return;
+    const bradPlays = community.config.BRAD_PLAYS === true || String(community.config.BRAD_PLAYS).toUpperCase() === "TRUE";
+    const sharedScenario: Scenario = bradPlays ? "Brad Plays" : "Brad Out";
+    if (persisted.scenario !== sharedScenario) setPersisted((current) => ({ ...current, scenario: sharedScenario }));
+  }, [community, persisted.scenario]);
+
+  useEffect(() => {
+    if (!community || community.players.length < 12 || community.assignments.length < 24) return;
+    const signature = JSON.stringify([community.config.MODEL_VERSION, community.players, community.assignments]);
+    if (signature === communityModelRef.current) return;
+    communityModelRef.current = signature;
+    setData({ players: community.players, assignments: community.assignments, source: "google-sheet", loadedAt: community.loadedAt });
+  }, [community]);
 
   useEffect(() => {
     let cancelled = false;
@@ -334,6 +415,7 @@ export default function App(): ReactElement {
   }, [selections]);
 
   const toggleMarket = (market: MarketSelection) => {
+    if (isGameLocked(community, market.gameId)) { setToast(`Game ${market.gameNumber} betting is locked`); return; }
     setSelections((current) => {
       if (current.some((item) => item.id === market.id)) return current.filter((item) => item.id !== market.id);
       const withoutOpposite = current.filter((item) => item.groupId !== market.groupId);
@@ -342,7 +424,7 @@ export default function App(): ReactElement {
     });
   };
 
-  const placeBet = () => {
+  const placeBet = async () => {
     const stakeNumber = Number.parseFloat(stake);
     const price = selections.length === 1 ? {
       fairProbability: selections[0].fairProbability,
@@ -357,13 +439,37 @@ export default function App(): ReactElement {
       legs: selections.map((market) => ({ marketId: market.id, gameId: market.gameId, kind: market.kind, subject: market.subject, playerId: market.playerId, teamId: market.teamId, stat: market.stat, side: market.side, line: market.line, label: market.label, odds: market.decimalOdds })),
       status: "pending", settledReturn: 0,
     };
+    if (persisted.sharedApiUrl) {
+      try {
+        await submitSharedTicket(persisted.sharedApiUrl, ticket);
+      } catch (reason) {
+        setToast(reason instanceof Error ? reason.message : "Central bet submission failed");
+        return;
+      }
+    }
     setPersisted((current) => ({ ...current, tickets: [...current.tickets, ticket] }));
     setSelections([]); setStake(""); setToast(`Ticket placed · ${money(stakeNumber)} units`);
+    if (persisted.sharedApiUrl) {
+      loadCommunityState(persisted.sharedApiUrl).then(setCommunity).catch(() => undefined);
+    }
   };
 
   const refreshData = async () => {
     setLoadingText("Refreshing the published Sheet…"); setSummary(null);
-    const loaded = await loadBasketballData(true); setData(loaded); setToast(`Ratings refreshed from ${sourceLabel(loaded)}`);
+    if (persisted.sharedApiUrl) {
+      try {
+        const next = await loadCommunityState(persisted.sharedApiUrl);
+        setCommunity(next);
+        if (next.players.length >= 12 && next.assignments.length >= 24) {
+          communityModelRef.current = JSON.stringify([next.config.MODEL_VERSION, next.players, next.assignments]);
+          setData({ players: next.players, assignments: next.assignments, source: "google-sheet", loadedAt: next.loadedAt });
+        }
+        setToast("Shared Google Sheet refreshed");
+      } catch (reason) { setCommunityError(reason instanceof Error ? reason.message : "Shared sync failed"); }
+      return;
+    }
+    const loaded = await loadBasketballData(true); setData(loaded);
+    setToast(`Ratings refreshed from ${sourceLabel(loaded)}`);
   };
 
   const setScenario = (scenario: Scenario) => setPersisted((current) => ({ ...current, scenario }));
@@ -383,16 +489,16 @@ export default function App(): ReactElement {
       <header className="topbar">
         <button className="brand" type="button" onClick={() => setTab("sportsbook")}><span className="brand-ball">21</span><span><b>THE BACHELOR BOOK</b><small>Three teams. One champion.</small></span></button>
         <nav>
-          {(["sportsbook", "bets", "tournament", "rules"] as Tab[]).map((item) => <button className={tab === item ? "active" : ""} type="button" key={item} onClick={() => setTab(item)}>{item === "sportsbook" ? "Markets" : item === "bets" ? "My bets" : item[0].toUpperCase() + item.slice(1)}</button>)}
+          {(["sportsbook", "bets", "leaderboard", "tournament", "rules"] as Tab[]).map((item) => <button className={tab === item ? "active" : ""} type="button" key={item} onClick={() => setTab(item)}>{item === "sportsbook" ? "Markets" : item === "bets" ? "My bets" : item[0].toUpperCase() + item.slice(1)}</button>)}
         </nav>
         <div className="header-actions">
-          <label className="scenario-toggle"><span>Brad</span><select value={persisted.scenario} onChange={(event) => setScenario(event.target.value as Scenario)}><option>Brad Out</option><option>Brad Plays</option></select></label>
+          <label className="scenario-toggle"><span>Brad</span><select disabled={Boolean(community)} title={community ? "Controlled by App Config in the shared Sheet" : "Local scenario"} value={persisted.scenario} onChange={(event) => setScenario(event.target.value as Scenario)}><option>Brad Out</option><option>Brad Plays</option></select></label>
           <button className="balance-button" type="button" onClick={() => setShowProfile(true)}><span>{persisted.participant || "Player"}</span><strong>{money(account.available)} <small>u</small></strong></button>
         </div>
       </header>
 
       <div className="status-strip">
-        <div><span className="live-dot"></span>{data ? sourceLabel(data) : "Connecting"}{data && <small>updated {nowLabel(data.loadedAt)}</small>}</div>
+        <div><span className={`live-dot ${communityError ? "error-dot" : ""}`}></span>{community ? "Shared Sheet live" : data ? sourceLabel(data) : "Connecting"}{community && <small>synced {nowLabel(community.loadedAt)}</small>}{communityError && <small>{communityError}</small>}</div>
         <div className="wager-progress"><span>100-unit mission</span><div><i style={{ width: `${requirement}%` }}></i></div><b>{money(requirement)}/100</b></div>
         <button type="button" onClick={refreshData} disabled={!data}>↻ Refresh ratings</button>
       </div>
@@ -402,8 +508,9 @@ export default function App(): ReactElement {
       ) : (
         <main className={`main-layout ${tab === "sportsbook" ? "with-slip" : ""}`}>
           {tab === "sportsbook" && <Sportsbook data={data} summary={summary} gameId={gameId} setGameId={setGameId} selections={selections} toggleMarket={toggleMarket} />}
-          {tab === "bets" && <TicketsView tickets={settledTickets} results={persisted.results} />}
-          {tab === "tournament" && <TournamentView data={data} scenario={persisted.scenario} results={persisted.results} onResults={(results) => setPersisted((current) => ({ ...current, results }))} />}
+          {tab === "bets" && <TicketsView tickets={settledTickets} results={officialResults} />}
+          {tab === "leaderboard" && <LeaderboardView community={community} results={officialResults} scenario={persisted.scenario} />}
+          {tab === "tournament" && <TournamentView data={data} scenario={persisted.scenario} results={officialResults} readOnly={Boolean(community)} onResults={(results) => setPersisted((current) => ({ ...current, results }))} />}
           {tab === "rules" && <RulesView />}
           {tab === "sportsbook" && <BetSlip selections={selections} price={parlayPrice} pricing={pricing} stake={stake} available={account.available} onStake={setStake} onRemove={(id) => setSelections((current) => current.filter((item) => item.id !== id))} onClear={() => setSelections([])} onPlace={placeBet} />}
         </main>
@@ -415,6 +522,7 @@ export default function App(): ReactElement {
             <button className="modal-close" type="button" onClick={() => persisted.participant && setShowProfile(false)}>×</button>
             <span className="brand-ball large">21</span><span className="eyebrow">Player card</span><h1 id="profile-title">Welcome to the book</h1><p>Enter a name for this device. Your 100-unit bankroll and tickets stay in this browser.</p>
             <label><span>Display name</span><input autoFocus value={persisted.participant} maxLength={30} placeholder="Your name" onChange={(event) => setPersisted((current) => ({ ...current, participant: event.target.value }))} /></label>
+            <label><span>Shared Sheet API URL <small>optional until Apps Script is deployed</small></span><input value={persisted.sharedApiUrl} placeholder="https://script.google.com/macros/s/…/exec" onChange={(event) => setPersisted((current) => ({ ...current, sharedApiUrl: event.target.value.trim() }))} /></label>
             <div className="profile-stats"><div><span>Available</span><strong>{money(account.available)}</strong></div><div><span>Total staked</span><strong>{money(account.totalStaked)}</strong></div><div><span>Tickets</span><strong>{persisted.tickets.length}</strong></div></div>
             <button className="primary-button" type="button" disabled={!persisted.participant.trim()} onClick={() => setShowProfile(false)}>Enter sportsbook</button>
             <div className="backup-actions"><button type="button" onClick={() => exportState({ ...persisted, tickets: settledTickets })}>Export backup</button><label>Import backup<input type="file" accept="application/json" onChange={handleImport} /></label><a href={sheetPublicUrl} target="_blank" rel="noreferrer">Open ratings sheet</a></div>

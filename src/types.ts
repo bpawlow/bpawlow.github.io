@@ -136,8 +136,71 @@ export interface GameResult {
 export interface PersistedState {
   participant: string;
   scenario: Scenario;
+  sharedApiUrl: string;
   tickets: Ticket[];
   results: Record<GameId, GameResult>;
+}
+
+export interface SharedScheduleRow {
+  gameId: GameId;
+  status: "UPCOMING" | "LIVE" | "FINAL";
+  team1Score: number | null;
+  team2Score: number | null;
+  final: boolean;
+  bettingLocked: boolean;
+  updatedAt: string;
+}
+
+export interface SharedBoxScore extends PlayerBoxScore {
+  gameId: GameId;
+  scenario: Scenario;
+  playerName: string;
+  teamId: TeamId;
+  played: boolean;
+}
+
+export interface SharedBet {
+  betId: string;
+  submittedAt: string;
+  bettor: string;
+  stake: number;
+  decimalOdds: number;
+  americanOdds: number;
+  potentialReturn: number;
+  scenario: Scenario;
+  status: TicketStatus;
+  settledReturn: number;
+  profit: number;
+  modelVersion: number;
+  eventId: string;
+}
+
+export interface SharedBetLeg {
+  betId: string;
+  legNumber: number;
+  gameId: GameId;
+  kind: MarketKind;
+  subject: string;
+  playerId?: string;
+  teamId?: TeamId;
+  stat?: StatKey;
+  side: MarketSelection["side"];
+  line?: number;
+  label: string;
+  odds: number;
+  grade?: string;
+}
+
+export interface CommunityState {
+  config: Record<string, string | number | boolean>;
+  players: Player[];
+  assignments: Assignment[];
+  schedule: SharedScheduleRow[];
+  boxScores: SharedBoxScore[];
+  bets: SharedBet[];
+  betLegs: SharedBetLeg[];
+  participants: string[];
+  loadedAt: string;
 }
 
 export const GAMES: GameDefinition[] = [

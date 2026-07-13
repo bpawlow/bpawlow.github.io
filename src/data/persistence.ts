@@ -14,7 +14,7 @@ function emptyResults(): PersistedState["results"] {
 }
 
 export function initialState(): PersistedState {
-  return { participant: "", scenario: "Brad Out", tickets: [], results: emptyResults() };
+  return { participant: "", scenario: "Brad Out", sharedApiUrl: "", tickets: [], results: emptyResults() };
 }
 
 export function loadState(): PersistedState {
@@ -26,6 +26,7 @@ export function loadState(): PersistedState {
     return {
       participant: typeof parsed.participant === "string" ? parsed.participant : "",
       scenario: (parsed.scenario === "Brad Plays" ? "Brad Plays" : "Brad Out") as Scenario,
+      sharedApiUrl: typeof parsed.sharedApiUrl === "string" ? parsed.sharedApiUrl : "",
       tickets: Array.isArray(parsed.tickets) ? parsed.tickets : [],
       results: { ...fallback.results, ...(parsed.results ?? {}) },
     };
