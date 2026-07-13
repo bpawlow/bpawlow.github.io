@@ -27,11 +27,11 @@ Google Sheets is the event's central datastore. Google Apps Script is a small co
 7. Select **Deploy → New deployment → Web app**.
 8. Set **Execute as** to yourself and **Who has access** to anyone. Deploy and authorize it.
 9. Copy the URL ending in `/exec`.
-10. Paste it into `App Config!B7` for reference and into the website’s Player Card under **Shared Sheet API URL**.
+10. Paste it into `App Config!B7` for reference. The current production URL is embedded in the website, so participants do not need to paste it into their Player Cards.
 11. Test the URL by opening it in a browser with `?action=state` appended. It should return JSON containing `"ok":true`.
 12. Add every bettor to `Participants`. Use exactly the same spelling they will enter in the app.
 
-For the cleanest event experience, embed the final Apps Script URL in the app after setup so guests do not have to paste it. Until then, it is saved once per browser in the Player Card.
+The Player Card field remains available as an advanced override if the Apps Script deployment URL ever changes.
 
 ## Before the tournament
 

@@ -1,5 +1,6 @@
 import { GAMES } from "../types";
 import type { GameId, PersistedState, Scenario } from "../types";
+import { DEFAULT_SHARED_API_URL } from "./sharedApi";
 
 const KEY = "bachelor-book-state-v3";
 
@@ -14,7 +15,7 @@ function emptyResults(): PersistedState["results"] {
 }
 
 export function initialState(): PersistedState {
-  return { participant: "", scenario: "Brad Out", sharedApiUrl: "", tickets: [], results: emptyResults() };
+  return { participant: "", scenario: "Brad Out", sharedApiUrl: DEFAULT_SHARED_API_URL, tickets: [], results: emptyResults() };
 }
 
 export function loadState(): PersistedState {
@@ -26,7 +27,7 @@ export function loadState(): PersistedState {
     return {
       participant: typeof parsed.participant === "string" ? parsed.participant : "",
       scenario: (parsed.scenario === "Brad Plays" ? "Brad Plays" : "Brad Out") as Scenario,
-      sharedApiUrl: typeof parsed.sharedApiUrl === "string" ? parsed.sharedApiUrl : "",
+      sharedApiUrl: typeof parsed.sharedApiUrl === "string" && parsed.sharedApiUrl.trim() ? parsed.sharedApiUrl.trim() : DEFAULT_SHARED_API_URL,
       tickets: Array.isArray(parsed.tickets) ? parsed.tickets : [],
       results: { ...fallback.results, ...(parsed.results ?? {}) },
     };

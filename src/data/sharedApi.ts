@@ -9,6 +9,8 @@ import type {
   Ticket,
 } from "../types";
 
+export const DEFAULT_SHARED_API_URL = "https://script.google.com/macros/s/AKfycbzcCsgpK6rPDJ0rCUSKjj454tPzHFkQPhrvmE97QtgqZVzwT5Jj0MrcXxDb3BAMXYxDdQ/exec";
+
 export async function loadCommunityState(apiUrl: string): Promise<CommunityState> {
   const separator = apiUrl.includes("?") ? "&" : "?";
   const response = await fetch(`${apiUrl}${separator}action=state&_=${Date.now()}`, { cache: "no-store", redirect: "follow" });
