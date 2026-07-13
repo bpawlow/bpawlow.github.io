@@ -80,7 +80,17 @@ The Apps Script will grade affected legs and tickets during the next sync. The w
 
 ## Team display names
 
-The `Team 1`, `Team 2`, and `Bye` values in `Schedule & Results` are the shared display names. Updating those cells updates game tabs, matchup headers, team-grouped player props, market labels, standings, and Tournament cards after the next sync. Keep each team's spelling consistent in all three schedule rows.
+The `Team 1`, `Team 2`, and `Bye` values in `Schedule & Results` are the shared display names. Updating those cells updates game tabs, matchup headers, team-grouped player props, market labels, standings, and Tournament cards after the next sync.
+
+Enter each name consistently in these positions:
+
+| Canonical team | Game 1 | Game 2 | Game 3 |
+| --- | --- | --- | --- |
+| Team A | `Team 1` | `Bye` | `Team 2` |
+| Team B | `Team 2` | `Team 1` | `Bye` |
+| Team C | `Bye` | `Team 2` | `Team 1` |
+
+Do not rename Team A/B/C in `Team Assignments`; those values are stable internal identifiers connecting players to the pricing model. Existing accepted tickets retain their original labels, while newly generated markets use the updated names.
 
 ## Leaderboards
 
@@ -116,7 +126,8 @@ The participant's available units are recalculated automatically, and the delete
 
 Every shared sync automatically normalizes each skill category to a group average of 5. The normalization preserves ordering and relative gaps while removing category-wide inflation. Changing any yellow player-rating cell therefore triggers a fresh normalization and, after sync, a complete 80,000-simulation repricing.
 
-- Use `Rating Normalization` to compare every original and adjusted value.
+- `Rating Normalization` is a historical audit of the workbook's original one-time adjustment. It is not used by the app or Apps Script and does not update after later edits.
+- You do not need to manage this tab. It may be hidden or deleted without affecting ratings, lines, props, or settlement.
 - If changing a player later, evaluate them relative to this group: 5 is group average, not average recreational basketball ability.
 - You do not need to rerun the workbook-building script or manually edit the normalization tab after a rating change.
 - After material rating changes, increment `MODEL_VERSION`, refresh the website, and avoid changing already accepted ticket lines.
