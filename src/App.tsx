@@ -8,7 +8,7 @@ import { formatAmerican, money } from "./model/odds";
 import { gradeLeg, ledger, settleTickets } from "./model/settlement";
 import { SimulationClient } from "./model/simulationClient";
 import { calculateStandings } from "./model/standings";
-import { GAMES, TEAM_COLORS } from "./types";
+import { GAMES, SCORING_RULES, TEAM_COLORS } from "./types";
 import type {
   BasketballData,
   CommunityState,
@@ -246,7 +246,7 @@ function TicketsView({ tickets, results, teamNames }: { tickets: Ticket[]; resul
 }
 
 function ScoreInput({ value, onChange, label }: { value: number | null; onChange: (value: number | null) => void; label: string }): ReactElement {
-  return <label className="score-input"><span>{label}</span><input type="number" min="0" max="22" value={value ?? ""} onChange={(event) => onChange(event.target.value === "" ? null : Number(event.target.value))} /></label>;
+  return <label className="score-input"><span>{label}</span><input type="number" min="0" max={SCORING_RULES.maximumWinningScore} value={value ?? ""} onChange={(event) => onChange(event.target.value === "" ? null : Number(event.target.value))} /></label>;
 }
 
 function TournamentView({ data, scenario, teamNames, results, onResults, readOnly = false }: {
@@ -288,7 +288,7 @@ function TournamentView({ data, scenario, teamNames, results, onResults, readOnl
                 <label className="final-check"><input type="checkbox" checked={result.final} disabled={result.team1Score === null || result.team2Score === null} onChange={(event) => updateGame(game.id, { final: event.target.checked })} /> Mark final</label>
                 </fieldset>
               </div>
-              <p className="scorekeeper-note">Points use ones-and-twos scoring. A made three counts as 2 points and 1 made three.</p>
+              <p className="scorekeeper-note">Points use standard twos-and-threes scoring. A made three counts as 3 points and 1 made three.</p>
               <div className="box-score-wrap"><table><thead><tr><th>Player</th><th>PTS</th><th>REB</th><th>AST</th><th>3PM</th></tr></thead><tbody>
                 {roster.map((assignment) => {
                   const box = result.playerStats[assignment.playerId] ?? { playerId: assignment.playerId, points: 0, rebounds: 0, assists: 0, threes: 0 };
@@ -343,14 +343,14 @@ function RulesView(): ReactElement {
     <div className="page-stack rules-page">
       <div className="page-heading"><span className="eyebrow">How it works</span><h1>House rules</h1><p>A play-money sportsbook built for the bachelor tournament.</p></div>
       <div className="rule-grid">
-        <section><span>01</span><h2>Race to 21</h2><p>Inside baskets count 1. Shots beyond the arc count 2. First to 21 or more wins; no win-by-two.</p></section>
+        <section><span>01</span><h2>Race to 21</h2><p>Inside baskets count 2. Shots beyond the arc count 3. First to 21 or more wins; no win-by-two.</p></section>
         <section><span>02</span><h2>Fouls</h2><p>No free throws. A foul returns possession to the fouled team with no recorded statistic.</p></section>
         <section><span>03</span><h2>Schedule</h2><p>Game 1: A–B. Game 2: B–C. Game 3: C–A. Every team plays twice.</p></section>
         <section><span>04</span><h2>Champion</h2><p>Most wins takes first. A three-way tie uses point differential, then points scored, then a coin flip.</p></section>
         <section><span>05</span><h2>Your 100</h2><p>Every participant begins with 100 units. The progress meter tracks the requirement to put all 100 into action.</p></section>
         <section><span>06</span><h2>Parlays</h2><p>Same-game and cross-game combinations are priced from joint tournament simulations, including correlation.</p></section>
       </div>
-      <section className="method-card"><span className="eyebrow">Pricing methodology</span><h2>Not NBA math in a smaller box</h2><p>The model simulates every possession until one team reaches 21 or 22. Player usage, one- and two-point shooting, defense, rebounds, assists, shared form, and fatigue produce coherent game and player outcomes. Lines are generated from 80,000 complete tournament simulations. Ratings come from the published party spreadsheet and remain subjective.</p><p>This is for entertainment only. No real money is accepted or processed.</p></section>
+      <section className="method-card"><span className="eyebrow">Pricing methodology</span><h2>Not NBA math in a smaller box</h2><p>The model simulates every possession until one team reaches at least 21, with inside baskets worth 2 and shots beyond the arc worth 3. Player usage, two- and three-point shooting, defense, rebounds, assists, shared form, and fatigue produce coherent game and player outcomes. Lines are generated from 80,000 complete tournament simulations. Ratings come from the published party spreadsheet and remain subjective.</p><p>This is for entertainment only. No real money is accepted or processed.</p></section>
     </div>
   );
 }

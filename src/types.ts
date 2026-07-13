@@ -4,6 +4,13 @@ export type GameId = "game-1" | "game-2" | "game-3";
 export type StatKey = "points" | "rebounds" | "assists" | "threes" | "pr" | "pa" | "ra" | "pra";
 export type MarketKind = "moneyline" | "spread" | "total" | "team-total" | "player-prop";
 
+export const SCORING_RULES = {
+  target: 21,
+  insidePoints: 2,
+  arcPoints: 3,
+  maximumWinningScore: 23,
+} as const;
+
 export interface Player {
   id: string;
   name: string;

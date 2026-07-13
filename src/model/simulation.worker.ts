@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { GAMES } from "../types";
+import { GAMES, SCORING_RULES } from "../types";
 import type {
   BasketballData,
   GameDefinition,
@@ -127,7 +127,7 @@ function simulateGame(
   let offense = rng.next() < 0.5 ? 0 : 1;
   let possessions = 0;
 
-  while (score[0] < 21 && score[1] < 21 && possessions < 300) {
+  while (score[0] < SCORING_RULES.target && score[1] < SCORING_RULES.target && possessions < 300) {
     const defense = offense === 0 ? 1 : 0;
     const offenseTeam = sides[offense];
     const offenseRoster = roster[offenseTeam];
@@ -146,22 +146,22 @@ function simulateGame(
       continue;
     }
 
-    const twoPointRate = clamp(0.18 + shooter.player.shooting * 0.025 + shooter.player.propUsage * 0.06, 0.18, 0.5);
-    const isTwo = rng.next() < twoPointRate;
-    const baseMake = isTwo ? 0.29 : 0.49;
-    const skill = isTwo ? shooter.player.shooting : (shooter.player.scoring * 0.7 + shooter.player.overall * 0.3);
+    const threePointRate = clamp(0.18 + shooter.player.shooting * 0.025 + shooter.player.propUsage * 0.06, 0.18, 0.5);
+    const isThree = rng.next() < threePointRate;
+    const baseMake = isThree ? 0.29 : 0.49;
+    const skill = isThree ? shooter.player.shooting : (shooter.player.scoring * 0.7 + shooter.player.overall * 0.3);
     const makeChance = clamp(
-      baseMake + (skill - 5) * (isTwo ? 0.022 : 0.025) - (teamDefense[defense] - 5) * 0.012
+      baseMake + (skill - 5) * (isThree ? 0.022 : 0.025) - (teamDefense[defense] - 5) * 0.012
         + (teamOffense[offense] - 5) * 0.004 + teamGameForm[offense] + individualForm - fatigue,
-      isTwo ? 0.14 : 0.28,
-      isTwo ? 0.48 : 0.68,
+      isThree ? 0.14 : 0.28,
+      isThree ? 0.48 : 0.68,
     );
 
     if (rng.next() < makeChance) {
-      const points = isTwo ? 2 : 1;
+      const points = isThree ? SCORING_RULES.arcPoints : SCORING_RULES.insidePoints;
       score[offense] += points;
       addStat(arrays, shooter.player.id, "points", sample, points);
-      if (isTwo) addStat(arrays, shooter.player.id, "threes", sample, 1);
+      if (isThree) addStat(arrays, shooter.player.id, "threes", sample, 1);
 
       const potentialAssisters = offenseRoster.filter((item) => item.player.id !== shooter.player.id);
       const assistChance = clamp(0.34 + (teamPlaymaking[offense] - 5) * 0.035, 0.22, 0.7);

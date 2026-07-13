@@ -67,7 +67,7 @@ After the game:
 2. Go to `Box Scores` and filter to the correct `Game ID` and active Brad scenario.
 3. Mark `Played?` true for each person who appeared.
 4. Enter:
-   - `Points`: party scoreboard points; inside basket = 1, beyond the arc = 2
+   - `Points`: scoreboard points; inside basket = 2, beyond the arc = 3
    - `Rebounds`: offensive plus defensive rebounds
    - `Assists`: final pass directly creating a made basket
    - `Three Pointers`: number of made shots beyond the arc, not the number of scoreboard points
@@ -80,7 +80,7 @@ The Apps Script will grade affected legs and tickets during the next sync. The w
 
 ## Available game markets
 
-The board offers winner, spread, and full-game total markets. Team totals are intentionally excluded: in a first-to-21 format, every winning team finishes on 21 or 22, making its team total largely a duplicate of the moneyline and unusually sensitive to whether the final basket is worth one or two points. Previously accepted team-total tickets remain supported by settlement logic.
+The board offers winner, spread, and full-game total markets. Team totals are intentionally excluded: in a first-to-21 format, every winning team finishes from 21 through 23, making its team total largely a duplicate of the moneyline and unusually sensitive to the final basket. Previously accepted team-total tickets remain supported by settlement logic.
 
 All straight markets—including game lines and player props—use a fixed 4.76% two-sided overround after the simulation calculates fair probabilities. A true 50/50 selection therefore displays at approximately `-110` on each side. Parlays are priced from their joint simulated outcomes so correlation is included, then receive a separate parlay margin that starts at 7.5% and increases modestly for additional legs.
 
