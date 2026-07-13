@@ -294,18 +294,6 @@ function buildMarkets(
       totalPair,
     );
 
-    [game.team1, game.team2].forEach((teamId, teamIndex) => {
-      const values = teamIndex === 0 ? arrays.team1Score : arrays.team2Score;
-      const line = halfLine(median(values));
-      const pair = outcomesAbove(values, line);
-      registerPair(
-        { ...groupBase, groupId: `${game.id}:tt:${teamId}`, kind: "team-total", category: "Team totals", subject: `${teamId} total`, teamId, line },
-        { id: `${game.id}:tt:${teamId}:over`, side: "over", line, label: `${teamId} over ${line}`, shortLabel: `O ${line}` },
-        { id: `${game.id}:tt:${teamId}:under`, side: "under", line, label: `${teamId} under ${line}`, shortLabel: `U ${line}` },
-        pair,
-      );
-    });
-
     const activePlayers = [...roster[game.team1], ...roster[game.team2]];
     for (const { player } of activePlayers) {
       const raw = {

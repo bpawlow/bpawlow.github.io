@@ -180,7 +180,6 @@ function Sportsbook({ data, summary, teamNames, gameId, setGameId, selections, t
     return [...groups.values()];
   };
   const gameLines = grouped(gameMarkets.filter((market) => market.category === "Game lines"));
-  const teamTotals = grouped(gameMarkets.filter((market) => market.category === "Team totals"));
   const propsByPlayer = new Map<string, MarketSelection[][]>();
   for (const pair of grouped(gameMarkets.filter((market) => market.category === "Player props"))) {
     if (pair[0].playerId) propsByPlayer.set(pair[0].playerId, [...(propsByPlayer.get(pair[0].playerId) ?? []), pair]);
@@ -206,10 +205,6 @@ function Sportsbook({ data, summary, teamNames, gameId, setGameId, selections, t
       <section className="market-card">
         <div className="section-title"><div><span className="eyebrow">Main board</span><h2>Game lines</h2></div><span className="column-hint">Selection · Odds</span></div>
         {gameLines.map((pair) => <MarketPair key={pair[0].groupId} pair={pair} selectedIds={selectedIds} onToggle={toggleMarket} />)}
-      </section>
-      <section className="market-card">
-        <div className="section-title"><div><span className="eyebrow">Team markets</span><h2>Team totals</h2></div></div>
-        {teamTotals.map((pair) => <MarketPair key={pair[0].groupId} pair={pair} selectedIds={selectedIds} onToggle={toggleMarket} />)}
       </section>
       <div className="section-title props-title"><div><span className="eyebrow">The full board</span><h2>Player props</h2></div><span>{propsByPlayer.size} active players</span></div>
       <div className="team-props-stack">
