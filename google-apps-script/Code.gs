@@ -444,6 +444,7 @@ function getState_() {
     });
   });
   ensureBoxScoreRows_(assignments);
+  syncLeaderboards_(config);
   var schedule = rows_("Schedule & Results").map(function(row) {
     return {
       gameId: row["Game ID"], number: Number(row["Game #"] || 0), type: row["Game Type"] || "TOURNAMENT",
@@ -546,6 +547,59 @@ function settleBets_() {
     legSheet.getRange(2, 1, legValues.length - 1, legValues[0].length).setValues(legValues.slice(1));
     SpreadsheetApp.flush();
   }
+}
+
+function leaderboardSheet_(name, headers) {
+  var workbook = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = workbook.getSheetByName(name) || workbook.insertSheet(name);
+  if (sheet.getMaxColumns() < headers.length) sheet.insertColumnsAfter(sheet.getMaxColumns(), headers.length - sheet.getMaxColumns());
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  if (sheet.getMaxRows() > 1) sheet.getRange(2, 1, sheet.getMaxRows() - 1, headers.length).clearContent();
+  return sheet;
+}
+
+function syncLeaderboards_(config) {
+  var bettingHeaders = ["Bettor", "Tickets", "Total Staked", "Settled Return", "Profit", "Units Available"];
+  var bettingSheet = leaderboardSheet_("Betting Leaderboard", bettingHeaders);
+  var bettors = {};
+  rows_("Participants").forEach(function(row) {
+    if (row.Bettor && bool_(row["Active?"])) bettors[String(row.Bettor).trim()] = { tickets: 0, staked: 0, returned: 0, profit: 0 };
+  });
+  rows_("Bets").forEach(function(row) {
+    var bettor = String(row.Bettor || "").trim();
+    if (!bettor) return;
+    if (!bettors[bettor]) bettors[bettor] = { tickets: 0, staked: 0, returned: 0, profit: 0 };
+    bettors[bettor].tickets += 1;
+    bettors[bettor].staked += Number(row.Stake || 0);
+    bettors[bettor].returned += Number(row["Settled Return"] || 0);
+    bettors[bettor].profit += Number(row.Profit || 0);
+  });
+  var bettingRows = Object.keys(bettors).map(function(name) {
+    var row = bettors[name];
+    return [name, row.tickets, row.staked, row.returned, row.profit, Number(config.STARTING_UNITS || 100) - row.staked + row.returned];
+  }).sort(function(left, right) { return right[5] - left[5] || right[4] - left[4] || String(left[0]).localeCompare(String(right[0])); });
+  if (bettingRows.length) bettingSheet.getRange(2, 1, bettingRows.length, bettingHeaders.length).setValues(bettingRows);
+
+  var playerHeaders = ["Player", "Games", "Points", "Rebounds", "Assists", "Three Pointers", "PRA"];
+  var playerSheet = leaderboardSheet_("Player Leaderboard", playerHeaders);
+  var scenario = bool_(config.BRAD_PLAYS) ? "Brad Plays" : "Brad Out";
+  var players = {};
+  rows_("Box Scores").forEach(function(row) {
+    if (row.Scenario !== scenario || !bool_(row["Played?"])) return;
+    var playerId = row["Player ID"];
+    if (!playerId) return;
+    if (!players[playerId]) players[playerId] = { name: row.Player, games: {}, points: 0, rebounds: 0, assists: 0, threes: 0 };
+    players[playerId].games[row["Game ID"]] = true;
+    players[playerId].points += Number(row.Points || 0);
+    players[playerId].rebounds += Number(row.Rebounds || 0);
+    players[playerId].assists += Number(row.Assists || 0);
+    players[playerId].threes += Number(row["Three Pointers"] || 0);
+  });
+  var playerRows = Object.keys(players).map(function(playerId) {
+    var row = players[playerId];
+    return [row.name, Object.keys(row.games).length, row.points, row.rebounds, row.assists, row.threes, row.points + row.rebounds + row.assists];
+  }).sort(function(left, right) { return right[6] - left[6] || right[2] - left[2] || String(left[0]).localeCompare(String(right[0])); });
+  if (playerRows.length) playerSheet.getRange(2, 1, playerRows.length, playerHeaders.length).setValues(playerRows);
 }
 
 function compare_(value, line, side) {

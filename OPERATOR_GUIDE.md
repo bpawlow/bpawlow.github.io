@@ -140,7 +140,7 @@ The website’s Leaderboard screen has two tables:
 - **Betting leaderboard:** units available and profit after settled tickets, ordered by bankroll.
 - **Player leaderboard:** games, points, rebounds, assists, made threes, and PRA for the active roster configuration.
 
-The spreadsheet contains equivalent `Betting Leaderboard` and `Player Leaderboard` tabs. Do not manually edit their calculated output.
+The spreadsheet contains equivalent `Betting Leaderboard` and `Player Leaderboard` tabs. The Apps Script rewrites these tabs during each website/API sync from `Bets`, `Bet Legs`, `Participants`, and `Box Scores`; do not manually edit their calculated output.
 
 ## Bankroll and bet management
 
