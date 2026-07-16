@@ -14,6 +14,7 @@ import type {
   ModelConfig,
 } from "../types";
 import { clamp, offeredPrice } from "./odds";
+import { balancedHalfLine } from "./lineSelection";
 
 const ctx: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobalScope;
 const SAMPLE_COUNT = 80_000;
@@ -239,11 +240,6 @@ function median(values: Uint8Array | Int16Array): number {
   return min;
 }
 
-function quantile(values: Uint8Array, probability: number): number {
-  const sorted = Array.from(values).sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.floor(Math.max(0, Math.min(1, probability)) * (sorted.length - 1)))];
-}
-
 function mean(values: Int16Array): number {
   let sum = 0;
   for (const value of values) sum += value;
@@ -370,7 +366,7 @@ function buildMarkets(
           : stat === "assists" ? modelConfig.assistLineQuantile
             : stat === "threes" ? modelConfig.threesLineQuantile
               : ["pr", "pa", "ra", "pra"].includes(stat) ? modelConfig.comboLineQuantile : modelConfig.pointsLineQuantile;
-        const line = halfLine(quantile(values, lineQuantile));
+        const line = balancedHalfLine(values, lineQuantile);
         const pair = outcomesAbove(values, line);
         const groupId = `${game.id}:player:${player.id}:${stat}`;
         registerPair(
