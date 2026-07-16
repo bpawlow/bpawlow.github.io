@@ -655,7 +655,7 @@ export default function App(): ReactElement {
         </main>
       )}
 
-      {tab === "sportsbook" && selections.length > 0 && summary && (
+      {tab === "sportsbook" && selections.length > 0 && summary && !mobileSlipOpen && (
         <button className="mobile-slip-launcher" type="button" onClick={() => setMobileSlipOpen(true)}>
           <span><b>{selections.length}</b>{selections.length === 1 ? " pick" : " picks"}</span>
           <strong>View bet slip</strong>

@@ -1444,7 +1444,7 @@ td input {
     left: 50%;
     bottom: 0;
     top: auto;
-    width: min(460px, calc(100vw - 24px));
+    width: 100vw;
     max-height: calc(100dvh - env(safe-area-inset-bottom));
     padding-bottom: env(safe-area-inset-bottom);
     overflow-y: auto;
@@ -1457,6 +1457,8 @@ td input {
       opacity 0.18s ease,
       visibility 0.22s;
     border-radius: 14px 14px 0 0;
+    border-left: 0;
+    border-right: 0;
   }
   .bet-slip.mobile-open {
     transform: translate(-50%, 0);
@@ -1480,7 +1482,7 @@ td input {
     position: fixed;
     z-index: 48;
     left: 50%;
-    bottom: 0px;
+    bottom: env(safe-area-inset-bottom);
     transform: translateX(-50%);
     width: min(440px, calc(100vw));
     min-height: 52px;
