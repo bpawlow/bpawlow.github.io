@@ -1,13 +1,8 @@
-function clampProbability(value: number): number {
-  return Math.max(0, Math.min(1, value));
-}
-
 /**
  * Selects a half-point line whose simulated over probability is closest to
- * 50%. The preferred quantile only breaks ties between equally balanced
- * discrete lines; it cannot force a materially unbalanced market.
+ * 50%. The median line breaks ties between equally balanced discrete lines.
  */
-export function balancedHalfLine(values: ArrayLike<number>, preferredQuantile = 0.5): number {
+export function balancedHalfLine(values: ArrayLike<number>): number {
   if (!values.length) return 0.5;
   let minimum = Number.POSITIVE_INFINITY;
   let maximum = Number.NEGATIVE_INFINITY;
@@ -19,7 +14,8 @@ export function balancedHalfLine(values: ArrayLike<number>, preferredQuantile = 
     sorted.push(value);
   }
   sorted.sort((left, right) => left - right);
-  const preferredValue = sorted[Math.min(sorted.length - 1, Math.floor(clampProbability(preferredQuantile) * (sorted.length - 1)))];
+  const middleIndex = (sorted.length - 1) / 2;
+  const preferredValue = (sorted[Math.floor(middleIndex)] + sorted[Math.ceil(middleIndex)]) / 2;
   const preferredLine = Math.floor(preferredValue) + 0.5;
 
   let bestLine = Math.floor(minimum) + 0.5;

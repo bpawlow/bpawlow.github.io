@@ -14,11 +14,6 @@ export const SCORING_RULES = {
 export interface ModelConfig {
   straightVig: number;
   parlayBaseVig: number;
-  reboundLineQuantile: number;
-  assistLineQuantile: number;
-  threesLineQuantile: number;
-  pointsLineQuantile: number;
-  comboLineQuantile: number;
   threePointRateMin: number;
   threePointRateMax: number;
   scoringUsageWeight: number;
@@ -29,17 +24,16 @@ export interface ModelConfig {
   threePointMakeSkillSlope: number;
   assistBaseRate: number;
   assistPlaymakingSlope: number;
+  assistRoleExponent: number;
+  assistRoleWeight: number;
   offensiveReboundBaseRate: number;
+  reboundRoleExponent: number;
+  reboundRoleWeight: number;
 }
 
 export const DEFAULT_MODEL_CONFIG: ModelConfig = {
   straightVig: 0.06,
   parlayBaseVig: 0.08,
-  reboundLineQuantile: 0.62,
-  assistLineQuantile: 0.66,
-  threesLineQuantile: 0.62,
-  pointsLineQuantile: 0.55,
-  comboLineQuantile: 0.58,
   threePointRateMin: 0.22,
   threePointRateMax: 0.55,
   scoringUsageWeight: 0.65,
@@ -50,7 +44,11 @@ export const DEFAULT_MODEL_CONFIG: ModelConfig = {
   threePointMakeSkillSlope: 0.03,
   assistBaseRate: 0.4,
   assistPlaymakingSlope: 0.04,
+  assistRoleExponent: 2.2,
+  assistRoleWeight: 1.4,
   offensiveReboundBaseRate: 0.28,
+  reboundRoleExponent: 1.9,
+  reboundRoleWeight: 1.35,
 };
 
 export interface Player {

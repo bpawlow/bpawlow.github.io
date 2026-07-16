@@ -49,11 +49,6 @@ export function modelConfigFromCommunity(community: CommunityState | null): Mode
   return {
     straightVig: configNumber(config, "STRAIGHT_VIG", DEFAULT_MODEL_CONFIG.straightVig, 0, 0.2),
     parlayBaseVig: configNumber(config, "PARLAY_BASE_VIG", DEFAULT_MODEL_CONFIG.parlayBaseVig, 0, 0.3),
-    reboundLineQuantile: configNumber(config, "REBOUND_LINE_QUANTILE", DEFAULT_MODEL_CONFIG.reboundLineQuantile, 0.5, 0.8),
-    assistLineQuantile: configNumber(config, "ASSIST_LINE_QUANTILE", DEFAULT_MODEL_CONFIG.assistLineQuantile, 0.5, 0.8),
-    threesLineQuantile: configNumber(config, "THREES_LINE_QUANTILE", DEFAULT_MODEL_CONFIG.threesLineQuantile, 0.5, 0.8),
-    pointsLineQuantile: configNumber(config, "POINTS_LINE_QUANTILE", DEFAULT_MODEL_CONFIG.pointsLineQuantile, 0.5, 0.8),
-    comboLineQuantile: configNumber(config, "COMBO_LINE_QUANTILE", DEFAULT_MODEL_CONFIG.comboLineQuantile, 0.5, 0.8),
     threePointRateMin: configNumber(config, "THREE_POINT_RATE_MIN", DEFAULT_MODEL_CONFIG.threePointRateMin, 0.05, 0.8),
     threePointRateMax: configNumber(config, "THREE_POINT_RATE_MAX", DEFAULT_MODEL_CONFIG.threePointRateMax, 0.1, 0.95),
     scoringUsageWeight: configNumber(config, "SCORING_USAGE_WEIGHT", DEFAULT_MODEL_CONFIG.scoringUsageWeight, 0, 1.5),
@@ -64,7 +59,11 @@ export function modelConfigFromCommunity(community: CommunityState | null): Mode
     threePointMakeSkillSlope: configNumber(config, "THREE_POINT_MAKE_SKILL_SLOPE", DEFAULT_MODEL_CONFIG.threePointMakeSkillSlope, 0, 0.08),
     assistBaseRate: configNumber(config, "ASSIST_BASE_RATE", DEFAULT_MODEL_CONFIG.assistBaseRate, 0.1, 0.8),
     assistPlaymakingSlope: configNumber(config, "ASSIST_PLAYMAKING_SLOPE", DEFAULT_MODEL_CONFIG.assistPlaymakingSlope, 0, 0.15),
+    assistRoleExponent: configNumber(config, "ASSIST_ROLE_EXPONENT", DEFAULT_MODEL_CONFIG.assistRoleExponent, 1, 3.5),
+    assistRoleWeight: configNumber(config, "ASSIST_ROLE_WEIGHT", DEFAULT_MODEL_CONFIG.assistRoleWeight, 0.5, 2.5),
     offensiveReboundBaseRate: configNumber(config, "OFFENSIVE_REBOUND_BASE_RATE", DEFAULT_MODEL_CONFIG.offensiveReboundBaseRate, 0.05, 0.6),
+    reboundRoleExponent: configNumber(config, "REBOUND_ROLE_EXPONENT", DEFAULT_MODEL_CONFIG.reboundRoleExponent, 1, 3.5),
+    reboundRoleWeight: configNumber(config, "REBOUND_ROLE_WEIGHT", DEFAULT_MODEL_CONFIG.reboundRoleWeight, 0.5, 2.5),
   };
 }
 

@@ -38,11 +38,11 @@ describe("shared Sheet state", () => {
 
   it("uses the calibrated player-prop defaults when config rows are missing", () => {
     expect(modelConfigFromCommunity(community)).toMatchObject({
-      pointsLineQuantile: 0.55,
-      reboundLineQuantile: 0.62,
-      assistLineQuantile: 0.66,
-      threesLineQuantile: 0.62,
       scoringUsageWeight: 0.65,
+      assistRoleExponent: 2.2,
+      assistRoleWeight: 1.4,
+      reboundRoleExponent: 1.9,
+      reboundRoleWeight: 1.35,
     });
   });
 });

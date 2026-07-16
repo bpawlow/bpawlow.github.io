@@ -112,7 +112,7 @@ The visible team-name columns are synchronized automatically from `App Config`; 
 
 For a one-game mixed roster, add rows to `Game Rosters` with the game ID, `DEFAULT` or `ALTERNATE` roster configuration, canonical team ID, player, and rotation share. A game-specific roster overrides the default `Team Assignments` roster for that game. Use `EXHIBITION` plus `Counts Toward Standings? = FALSE` for a casual post-tournament game. A championship can be counted or excluded according to the organizer’s choice.
 
-After changing rosters or model settings, increment `MODEL_VERSION`, refresh the website, and do not change accepted betting assumptions without closing betting and reviewing existing tickets. The line-quantile controls are tie-break preferences, not a way to force higher lines. The point controls `SCORING_USAGE_WEIGHT`, `SHOOTING_USAGE_WEIGHT`, `POINTS_MAKE_SKILL_SLOPE`, and `THREE_POINT_MAKE_SKILL_SLOPE` are for organizer calibration only; leave them at their defaults unless you are deliberately recalibrating the model.
+After changing rosters or model settings, increment `MODEL_VERSION`, refresh the website, and do not change accepted betting assumptions without closing betting and reviewing existing tickets. Player lines are always selected near the simulated 50/50 threshold; there are no editable quantile settings. The most useful advanced controls are `ASSIST_ROLE_EXPONENT`, `ASSIST_ROLE_WEIGHT`, `REBOUND_ROLE_EXPONENT`, and `REBOUND_ROLE_WEIGHT`, which adjust how strongly elite playmakers and rebounders receive individual credit. The points and three-point sensitivity controls are calibration-only; leave them at their defaults unless you are deliberately recalibrating the model.
 
 ## Leaderboards
 

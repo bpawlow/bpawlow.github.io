@@ -191,7 +191,7 @@ function simulateGame(
         const assister = pickWeighted(potentialAssisters, ({ player, share }) =>
           share * (
             0.08
-            + Math.pow(player.playmaking / 10, 2.0) * 1.4
+            + Math.pow(player.playmaking / 10, modelConfig.assistRoleExponent) * modelConfig.assistRoleWeight
             + player.propUsage * 0.15
           ), rng);
         addStat(arrays, assister.player.id, "assists", sample, 1);
@@ -211,7 +211,7 @@ function simulateGame(
     const rebounder = pickWeighted(reboundRoster, ({ player, share }) =>
       share * (
         0.08
-        + Math.pow(player.rebounding / 10, 1.7) * 1.35
+        + Math.pow(player.rebounding / 10, modelConfig.reboundRoleExponent) * modelConfig.reboundRoleWeight
         + player.defense / 10 * 0.22
       ), rng);
     addStat(arrays, rebounder.player.id, "rebounds", sample, 1);
@@ -362,11 +362,7 @@ function buildMarkets(
         points: "Points", rebounds: "Rebounds", assists: "Assists", threes: "3-pointers", pr: "Pts + Reb", pa: "Pts + Ast", ra: "Reb + Ast", pra: "PRA",
       };
       for (const [stat, values] of statValues) {
-        const lineQuantile = stat === "rebounds" ? modelConfig.reboundLineQuantile
-          : stat === "assists" ? modelConfig.assistLineQuantile
-            : stat === "threes" ? modelConfig.threesLineQuantile
-              : ["pr", "pa", "ra", "pra"].includes(stat) ? modelConfig.comboLineQuantile : modelConfig.pointsLineQuantile;
-        const line = balancedHalfLine(values, lineQuantile);
+        const line = balancedHalfLine(values);
         const pair = outcomesAbove(values, line);
         const groupId = `${game.id}:player:${player.id}:${stat}`;
         registerPair(

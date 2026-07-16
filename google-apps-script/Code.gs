@@ -218,15 +218,24 @@ function getConfig_() {
 
 function ensureModelConfig_() {
   var configSheet = sheet_("App Config");
+  var deprecated = {
+    "APPS_SCRIPT_URL": true,
+    "AUTO_REFRESH_SECONDS": true,
+    "REBOUND_LINE_QUANTILE": true,
+    "ASSIST_LINE_QUANTILE": true,
+    "THREES_LINE_QUANTILE": true,
+    "POINTS_LINE_QUANTILE": true,
+    "COMBO_LINE_QUANTILE": true
+  };
+  var sheetValues = configSheet.getDataRange().getValues();
+  var keyColumn = sheetValues[0].indexOf("Key");
+  for (var row = sheetValues.length - 1; row >= 1; row--) {
+    if (deprecated[sheetValues[row][keyColumn]]) configSheet.deleteRow(row + 1);
+  }
   var rows = rows_("App Config");
   var existing = {};
   rows.forEach(function(row) { existing[row.Key] = row.Value; });
   var modelRows = [
-    ["REBOUND_LINE_QUANTILE", 0.62, "Rebound line percentile; higher makes the offered line harder to clear.", 0.56],
-    ["ASSIST_LINE_QUANTILE", 0.66, "Assist line percentile; higher makes the offered line harder to clear.", 0.58],
-    ["THREES_LINE_QUANTILE", 0.62, "Made-three line percentile; higher makes the offered line harder to clear.", 0.56],
-    ["POINTS_LINE_QUANTILE", 0.55, "Points line percentile; higher makes the offered line harder to clear."],
-    ["COMBO_LINE_QUANTILE", 0.58, "Combo-prop line percentile; higher makes the offered line harder to clear.", 0.55],
     ["THREE_POINT_RATE_MIN", 0.22, "Minimum amateur pickup three-point attempt rate."],
     ["THREE_POINT_RATE_MAX", 0.55, "Maximum amateur pickup three-point attempt rate."],
     ["SCORING_USAGE_WEIGHT", 0.65, "How strongly scoring rating concentrates shot attempts."],
@@ -237,7 +246,11 @@ function ensureModelConfig_() {
     ["THREE_POINT_MAKE_SKILL_SLOPE", 0.03, "Three-point make-probability sensitivity to shooting skill."],
     ["ASSIST_BASE_RATE", 0.40, "Base chance that a made basket receives an assist."],
     ["ASSIST_PLAYMAKING_SLOPE", 0.04, "Assist-rate increase per playmaking rating point."],
-    ["OFFENSIVE_REBOUND_BASE_RATE", 0.28, "Base chance a miss becomes an offensive rebound."]
+    ["ASSIST_ROLE_EXPONENT", 2.2, "How sharply high-playmaking players receive assist credit."],
+    ["ASSIST_ROLE_WEIGHT", 1.4, "Strength of individual playmaking in assist-credit allocation."],
+    ["OFFENSIVE_REBOUND_BASE_RATE", 0.28, "Base chance a miss becomes an offensive rebound."],
+    ["REBOUND_ROLE_EXPONENT", 1.9, "How sharply high-rebounding players receive rebound credit."],
+    ["REBOUND_ROLE_WEIGHT", 1.35, "Strength of individual rebounding in rebound allocation."]
   ];
   modelRows.forEach(function(item) {
     if (existing[item[0]] === undefined || existing[item[0]] === "") {
@@ -259,13 +272,13 @@ function ensureModelConfig_() {
     }
   });
   var config = getConfig_();
-  if (config.MODEL_VERSION !== undefined && Number(config.MODEL_VERSION) < 3) {
+  if (config.MODEL_VERSION !== undefined && Number(config.MODEL_VERSION) < 4) {
     var values = configSheet.getDataRange().getValues();
     var keyColumn = values[0].indexOf("Key");
     var valueColumn = values[0].indexOf("Value");
     for (var row = 1; row < values.length; row++) {
       if (values[row][keyColumn] === "MODEL_VERSION") {
-        configSheet.getRange(row + 1, valueColumn + 1).setValue(3);
+        configSheet.getRange(row + 1, valueColumn + 1).setValue(4);
         break;
       }
     }
