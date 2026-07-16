@@ -133,8 +133,16 @@ function simulateGame(
     const offenseTeam = sides[offense];
     const offenseRoster = roster[offenseTeam];
     const defenseRoster = roster[sides[defense]];
+    // Usage is intentionally player-specific. In a short pickup game, shots
+    // concentrate among the better scorers/shooters instead of being spread
+    // nearly evenly across the four players.
     const shooter = pickWeighted(offenseRoster, ({ player, share }) =>
-      share * (0.35 + player.propUsage * 0.8 + player.scoring * 0.035), rng);
+      share * (
+        0.12
+        + player.propUsage * 1.05
+        + Math.pow(player.scoring / 10, 1.45) * modelConfig.scoringUsageWeight
+        + Math.pow(player.shooting / 10, 1.2) * modelConfig.shootingUsageWeight
+      ), rng);
     const fatigue = consecutive.has(offenseTeam)
       ? Math.max(0, 7 - teamMetric(offenseRoster, "stamina")) * 0.006
       : 0;
@@ -147,15 +155,24 @@ function simulateGame(
       continue;
     }
 
-    const threePointRate = clamp(0.22 + shooter.player.shooting * 0.025 + shooter.player.propUsage * 0.06, modelConfig.threePointRateMin, modelConfig.threePointRateMax);
+    // Amateur pickup games generate more three-point attempts than NBA-style
+    // half-court priors. Shooting and usage now both move an individual's
+    // attempt mix, while the configured cap keeps the game total plausible.
+    const threePointRate = clamp(
+      0.12 + shooter.player.shooting * modelConfig.threePointAttemptShootingWeight
+        + shooter.player.propUsage * modelConfig.threePointAttemptUsageWeight,
+      modelConfig.threePointRateMin,
+      modelConfig.threePointRateMax,
+    );
     const isThree = rng.next() < threePointRate;
-    const baseMake = isThree ? 0.29 : 0.49;
+    const baseMake = isThree ? 0.27 : 0.47;
     const skill = isThree ? shooter.player.shooting : (shooter.player.scoring * 0.7 + shooter.player.overall * 0.3);
     const makeChance = clamp(
-      baseMake + (skill - 5) * (isThree ? 0.022 : 0.025) - (teamDefense[defense] - 5) * 0.012
+      baseMake + (skill - 5) * (isThree ? modelConfig.threePointMakeSkillSlope : modelConfig.pointsMakeSkillSlope)
+        - (teamDefense[defense] - 5) * 0.012
         + (teamOffense[offense] - 5) * 0.004 + teamGameForm[offense] + individualForm - fatigue,
-      isThree ? 0.14 : 0.28,
-      isThree ? 0.48 : 0.68,
+      isThree ? 0.12 : 0.25,
+      isThree ? 0.5 : 0.7,
     );
 
     if (rng.next() < makeChance) {
@@ -167,7 +184,15 @@ function simulateGame(
       const potentialAssisters = offenseRoster.filter((item) => item.player.id !== shooter.player.id);
       const assistChance = clamp(modelConfig.assistBaseRate + (teamPlaymaking[offense] - 5) * modelConfig.assistPlaymakingSlope, 0.22, 0.75);
       if (potentialAssisters.length && rng.next() < assistChance) {
-        const assister = pickWeighted(potentialAssisters, ({ player, share }) => share * (0.3 + player.playmaking / 6), rng);
+        // Team playmaking controls how many made baskets receive assists;
+        // individual playmaking controls who gets credit. The nonlinear term
+        // makes a 9/10 playmaker materially different from a 5/10 player.
+        const assister = pickWeighted(potentialAssisters, ({ player, share }) =>
+          share * (
+            0.08
+            + Math.pow(player.playmaking / 10, 2.0) * 1.4
+            + player.propUsage * 0.15
+          ), rng);
         addStat(arrays, assister.player.id, "assists", sample, 1);
       }
       offense = defense;
@@ -179,7 +204,15 @@ function simulateGame(
     const offensiveReboundChance = clamp(modelConfig.offensiveReboundBaseRate + (offenseRebounding - defenseRebounding) * 0.018, 0.13, 0.42);
     const offensiveBoard = rng.next() < offensiveReboundChance;
     const reboundRoster = offensiveBoard ? offenseRoster : defenseRoster;
-    const rebounder = pickWeighted(reboundRoster, ({ player, share }) => share * (0.25 + player.rebounding / 5), rng);
+    // Rebounds are allocated from the actual misses, but size/rebounding and
+    // defensive positioning decide who collects them. This prevents every
+    // player from receiving an almost identical rebound distribution.
+    const rebounder = pickWeighted(reboundRoster, ({ player, share }) =>
+      share * (
+        0.08
+        + Math.pow(player.rebounding / 10, 1.7) * 1.35
+        + player.defense / 10 * 0.22
+      ), rng);
     addStat(arrays, rebounder.player.id, "rebounds", sample, 1);
     if (!offensiveBoard) offense = defense;
   }
@@ -336,7 +369,7 @@ function buildMarkets(
         const lineQuantile = stat === "rebounds" ? modelConfig.reboundLineQuantile
           : stat === "assists" ? modelConfig.assistLineQuantile
             : stat === "threes" ? modelConfig.threesLineQuantile
-              : ["pr", "pa", "ra", "pra"].includes(stat) ? modelConfig.comboLineQuantile : 0.5;
+              : ["pr", "pa", "ra", "pra"].includes(stat) ? modelConfig.comboLineQuantile : modelConfig.pointsLineQuantile;
         const line = halfLine(quantile(values, lineQuantile));
         const pair = outcomesAbove(values, line);
         const groupId = `${game.id}:player:${player.id}:${stat}`;
@@ -356,7 +389,7 @@ function initialize(data: BasketballData, scenario: Scenario): SimulationSummary
   eventOutcomes = new Map();
   // Cached data from an older build may not have modelConfig yet. Normalize
   // it once here so every simulation/pricing path uses a valid configuration.
-  const modelConfig = data.modelConfig ?? DEFAULT_MODEL_CONFIG;
+  const modelConfig = { ...DEFAULT_MODEL_CONFIG, ...(data.modelConfig ?? {}) };
   currentModelConfig = modelConfig;
   const gameDefinitions = data.games?.length ? data.games : GAMES;
   const defaultRoster = rosterFor(data, scenario);

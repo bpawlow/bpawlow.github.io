@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CommunityState } from "../types";
-import { gamesFromSchedule, resultsFromCommunity, sharedTickets } from "./sharedApi";
+import { gamesFromSchedule, modelConfigFromCommunity, resultsFromCommunity, sharedTickets } from "./sharedApi";
 
 const community: CommunityState = {
   config: { BRAD_PLAYS: false }, loadedAt: "2026-01-01", participants: ["Ben"],
@@ -34,5 +34,15 @@ describe("shared Sheet state", () => {
       { gameId: "game-4", number: 4, type: "EXHIBITION", team1Id: "Team A", team1: "Team A", team2Id: "Team C", team2: "Team C", byeId: null, bye: "", countsTowardStandings: false, bettingEnabled: true, status: "UPCOMING", team1Score: null, team2Score: null, final: false, bettingLocked: false, updatedAt: "" },
     ]);
     expect(games[0]).toMatchObject({ id: "game-4", type: "EXHIBITION", team1: "Team A", team2: "Team C", bye: null, countsTowardStandings: false });
+  });
+
+  it("uses the calibrated player-prop defaults when config rows are missing", () => {
+    expect(modelConfigFromCommunity(community)).toMatchObject({
+      pointsLineQuantile: 0.55,
+      reboundLineQuantile: 0.62,
+      assistLineQuantile: 0.66,
+      threesLineQuantile: 0.62,
+      scoringUsageWeight: 0.65,
+    });
   });
 });

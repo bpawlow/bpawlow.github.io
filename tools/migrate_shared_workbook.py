@@ -10,12 +10,19 @@ from openpyxl import load_workbook
 MODEL_CONFIG = (
     ("STRAIGHT_VIG", 0.06, "Straight-market overround used for game lines and player props."),
     ("PARLAY_BASE_VIG", 0.08, "Base parlay margin applied after joint simulation pricing."),
-    ("REBOUND_LINE_QUANTILE", 0.56, "Conservative rebound line percentile."),
-    ("ASSIST_LINE_QUANTILE", 0.58, "Conservative assist line percentile."),
-    ("THREES_LINE_QUANTILE", 0.56, "Conservative made-three line percentile."),
-    ("COMBO_LINE_QUANTILE", 0.55, "Conservative combo-prop line percentile."),
+    ("REBOUND_LINE_QUANTILE", 0.62, "Rebound line percentile; higher makes the offered line harder to clear.", 0.56),
+    ("ASSIST_LINE_QUANTILE", 0.66, "Assist line percentile; higher makes the offered line harder to clear.", 0.58),
+    ("THREES_LINE_QUANTILE", 0.62, "Made-three line percentile; higher makes the offered line harder to clear.", 0.56),
+    ("POINTS_LINE_QUANTILE", 0.55, "Points line percentile; higher makes the offered line harder to clear."),
+    ("COMBO_LINE_QUANTILE", 0.58, "Combo-prop line percentile; higher makes the offered line harder to clear.", 0.55),
     ("THREE_POINT_RATE_MIN", 0.22, "Minimum amateur pickup three-point attempt rate."),
     ("THREE_POINT_RATE_MAX", 0.55, "Maximum amateur pickup three-point attempt rate."),
+    ("SCORING_USAGE_WEIGHT", 0.65, "How strongly scoring rating concentrates shot attempts."),
+    ("SHOOTING_USAGE_WEIGHT", 0.18, "How strongly shooting rating concentrates shot attempts."),
+    ("THREE_POINT_ATTEMPT_SHOOTING_WEIGHT", 0.04, "How strongly shooting rating changes three-point attempt mix."),
+    ("THREE_POINT_ATTEMPT_USAGE_WEIGHT", 0.20, "How strongly player usage changes three-point attempt mix."),
+    ("POINTS_MAKE_SKILL_SLOPE", 0.028, "Two-point make-probability sensitivity to individual skill."),
+    ("THREE_POINT_MAKE_SKILL_SLOPE", 0.03, "Three-point make-probability sensitivity to shooting skill."),
     ("ASSIST_BASE_RATE", 0.40, "Base chance that a made basket receives an assist."),
     ("ASSIST_PLAYMAKING_SLOPE", 0.04, "Assist-rate increase per playmaking rating point."),
     ("OFFENSIVE_REBOUND_BASE_RATE", 0.28, "Base chance a miss becomes an offensive rebound."),
@@ -43,6 +50,17 @@ def migrate(path: Path) -> None:
         config.append([key, value, description, "Organizer"])
         copy_row_style(config, min(row - 1, 11), row, 4)
         config.cell(row, 2).fill = copy(config["B11"].fill)
+    for key, value, _description, *legacy in MODEL_CONFIG:
+        if not legacy:
+            continue
+        for row in range(2, config.max_row + 1):
+            if config.cell(row, 1).value == key and config.cell(row, 2).value == legacy[0]:
+                config.cell(row, 2).value = value
+                break
+    for row in range(2, config.max_row + 1):
+        if config.cell(row, 1).value == "MODEL_VERSION" and (config.cell(row, 2).value or 0) < 3:
+            config.cell(row, 2).value = 3
+            break
 
     schedule = workbook["Schedule & Results"]
     headers = [schedule.cell(1, column).value for column in range(1, schedule.max_column + 1)]

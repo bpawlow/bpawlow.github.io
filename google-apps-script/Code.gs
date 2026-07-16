@@ -216,6 +216,62 @@ function getConfig_() {
   return config;
 }
 
+function ensureModelConfig_() {
+  var configSheet = sheet_("App Config");
+  var rows = rows_("App Config");
+  var existing = {};
+  rows.forEach(function(row) { existing[row.Key] = row.Value; });
+  var modelRows = [
+    ["REBOUND_LINE_QUANTILE", 0.62, "Rebound line percentile; higher makes the offered line harder to clear.", 0.56],
+    ["ASSIST_LINE_QUANTILE", 0.66, "Assist line percentile; higher makes the offered line harder to clear.", 0.58],
+    ["THREES_LINE_QUANTILE", 0.62, "Made-three line percentile; higher makes the offered line harder to clear.", 0.56],
+    ["POINTS_LINE_QUANTILE", 0.55, "Points line percentile; higher makes the offered line harder to clear."],
+    ["COMBO_LINE_QUANTILE", 0.58, "Combo-prop line percentile; higher makes the offered line harder to clear.", 0.55],
+    ["THREE_POINT_RATE_MIN", 0.22, "Minimum amateur pickup three-point attempt rate."],
+    ["THREE_POINT_RATE_MAX", 0.55, "Maximum amateur pickup three-point attempt rate."],
+    ["SCORING_USAGE_WEIGHT", 0.65, "How strongly scoring rating concentrates shot attempts."],
+    ["SHOOTING_USAGE_WEIGHT", 0.18, "How strongly shooting rating concentrates shot attempts."],
+    ["THREE_POINT_ATTEMPT_SHOOTING_WEIGHT", 0.04, "How strongly shooting rating changes three-point attempt mix."],
+    ["THREE_POINT_ATTEMPT_USAGE_WEIGHT", 0.20, "How strongly player usage changes three-point attempt mix."],
+    ["POINTS_MAKE_SKILL_SLOPE", 0.028, "Two-point make-probability sensitivity to individual skill."],
+    ["THREE_POINT_MAKE_SKILL_SLOPE", 0.03, "Three-point make-probability sensitivity to shooting skill."],
+    ["ASSIST_BASE_RATE", 0.40, "Base chance that a made basket receives an assist."],
+    ["ASSIST_PLAYMAKING_SLOPE", 0.04, "Assist-rate increase per playmaking rating point."],
+    ["OFFENSIVE_REBOUND_BASE_RATE", 0.28, "Base chance a miss becomes an offensive rebound."]
+  ];
+  modelRows.forEach(function(item) {
+    if (existing[item[0]] === undefined || existing[item[0]] === "") {
+      configSheet.appendRow([item[0], item[1], item[2], "Organizer"]);
+      return;
+    }
+    // Migrate only values that exactly match the old untouched defaults.
+    // Any organizer-customized value is preserved.
+    if (item[3] !== undefined && Number(existing[item[0]]) === Number(item[3])) {
+      var values = configSheet.getDataRange().getValues();
+      var keyColumn = values[0].indexOf("Key");
+      var valueColumn = values[0].indexOf("Value");
+      for (var row = 1; row < values.length; row++) {
+        if (values[row][keyColumn] === item[0]) {
+          configSheet.getRange(row + 1, valueColumn + 1).setValue(item[1]);
+          break;
+        }
+      }
+    }
+  });
+  var config = getConfig_();
+  if (config.MODEL_VERSION !== undefined && Number(config.MODEL_VERSION) < 3) {
+    var values = configSheet.getDataRange().getValues();
+    var keyColumn = values[0].indexOf("Key");
+    var valueColumn = values[0].indexOf("Value");
+    for (var row = 1; row < values.length; row++) {
+      if (values[row][keyColumn] === "MODEL_VERSION") {
+        configSheet.getRange(row + 1, valueColumn + 1).setValue(3);
+        break;
+      }
+    }
+  }
+}
+
 function canonicalGame_(gameId) {
   var games = {
     "game-1": { team1: "Team A", team2: "Team B", bye: "Team C" },
@@ -336,6 +392,7 @@ function ensureBoxScoreRows_(assignments) {
 }
 
 function getState_() {
+  ensureModelConfig_();
   syncTeamNames_();
   settleBets_();
   var config = getConfig_();
