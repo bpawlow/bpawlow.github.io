@@ -374,20 +374,26 @@ function ensureBoxScoreRows_(assignments) {
   var headers = values[0];
   var columns = index_(headers);
   var existing = {};
-  values.slice(1).forEach(function(row) {
+  values.slice(1).forEach(function(row, offset) {
     if (row[columns["Game ID"]] && row[columns.Scenario] && row[columns["Player ID"]]) {
-      existing[[row[columns["Game ID"]], row[columns.Scenario], row[columns["Player ID"]]].join("|")] = true;
+      existing[[row[columns["Game ID"]], row[columns.Scenario], row[columns["Player ID"]]].join("|")] = { row: offset + 2, teamId: row[columns.Team] };
     }
   });
   var schedule = rows_("Schedule & Results");
   var scenarios = ["Brad Out", "Brad Plays"];
   schedule.forEach(function(game) {
     scenarios.forEach(function(scenario) {
-      var specific = assignments.filter(function(item) { return item.gameId === game["Game ID"] && item.scenario === scenario; });
-      var roster = specific.length ? specific : assignments.filter(function(item) { return !item.gameId && item.scenario === scenario; });
+      var defaults = assignments.filter(function(item) { return !item.gameId && item.scenario === scenario; });
+      var overrides = assignments.filter(function(item) { return item.gameId === game["Game ID"] && item.scenario === scenario; });
+      var overriddenPlayers = {};
+      overrides.forEach(function(item) { overriddenPlayers[item.playerId] = true; });
+      var roster = defaults.filter(function(item) { return !overriddenPlayers[item.playerId]; }).concat(overrides);
       roster.forEach(function(item) {
         var key = [game["Game ID"], scenario, item.playerId].join("|");
-        if (existing[key]) return;
+        if (existing[key]) {
+          if (existing[key].teamId !== item.teamId) boxSheet.getRange(existing[key].row, columns.Team + 1).setValue(item.teamId);
+          return;
+        }
         var row = new Array(headers.length).fill("");
         row[columns["Game ID"]] = game["Game ID"];
         row[columns.Scenario] = scenario;

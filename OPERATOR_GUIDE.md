@@ -123,11 +123,11 @@ For a one-game mixed roster:
 
 1. Close betting for that game.
 2. In `Game Rosters`, add or edit rows with the game ID, `DEFAULT` or `ALTERNATE` roster configuration, canonical team ID, player, and rotation share.
-3. Enter the complete participating roster for that game and configuration—not only the player who moved. A game-specific row causes the game-specific roster to override the default roster.
+3. Enter only the player(s) who moved or changed. The app merges those rows into the default roster and removes each overridden player from their former team.
 4. Leave the bye team out of the game-specific rows.
 5. Increment `MODEL_VERSION` and refresh the website.
 
-For example, if Peter replaces Josh on Team B in `game-2`, enter all Team B and Team C players for `game-2` under `DEFAULT`, with Peter included and Josh removed. If no game-specific rows remain for a game/configuration, the app falls back to `Team Assignments`.
+For example, if Peter moves from Team A to Team B in `game-2`, enter one `game-2` / `DEFAULT` row for Peter with `Team ID = Team B`. The default rows remain active for every other player. If no game-specific rows remain for a game/configuration, the app falls back entirely to `Team Assignments`.
 
 For a last-minute change to an upcoming game, use `Game Rosters` instead of rewriting completed-game assignments or historical box scores. Existing tickets retain their original labels, odds, and canonical team identity. Verify the updated markets and roster before reopening betting. Use `EXHIBITION` plus `Counts Toward Standings? = FALSE` for a casual post-tournament game. A championship can be counted or excluded according to the organizer’s choice.
 

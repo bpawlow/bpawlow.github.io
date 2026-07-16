@@ -15,6 +15,7 @@ import type {
 } from "../types";
 import { clamp, offeredPrice } from "./odds";
 import { balancedHalfLine } from "./lineSelection";
+import { effectiveAssignments } from "./rosters";
 
 const ctx: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobalScope;
 const SAMPLE_COUNT = 80_000;
@@ -78,8 +79,7 @@ function pickWeighted<T>(items: T[], weight: (item: T) => number, rng: Rng): T {
 function rosterFor(data: BasketballData, scenario: Scenario, gameId?: GameId): Record<TeamId, RosterPlayer[]> {
   const players = new Map(data.players.map((player) => [player.id, player]));
   const roster = { "Team A": [], "Team B": [], "Team C": [] } as Record<TeamId, RosterPlayer[]>;
-  const specific = gameId ? data.assignments.filter((item) => item.scenario === scenario && item.gameId === gameId) : [];
-  const assignments = specific.length ? specific : data.assignments.filter((item) => item.scenario === scenario && !item.gameId);
+  const assignments = effectiveAssignments(data.assignments, scenario, gameId);
   for (const assignment of assignments) {
     const player = players.get(assignment.playerId);
     if (player?.active) roster[assignment.teamId].push({ player, share: assignment.rotationShare });
