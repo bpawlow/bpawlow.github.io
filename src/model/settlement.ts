@@ -76,3 +76,7 @@ export function ledger(tickets: Ticket[]): { available: number; totalStaked: num
   const available = 100 - totalStaked + returns;
   return { available, totalStaked, returns, profit: available - 100 };
 }
+
+export function canStake(available: number, stake: number): boolean {
+  return Number.isFinite(available) && Number.isFinite(stake) && stake > 0 && stake <= available + 0.0001;
+}

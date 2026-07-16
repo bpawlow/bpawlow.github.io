@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PersistedState, Ticket } from "../types";
 import { initialState } from "../data/persistence";
-import { gradeLeg, ledger, settleTicket } from "./settlement";
+import { canStake, gradeLeg, ledger, settleTicket } from "./settlement";
 
 function finalResults(): PersistedState["results"] {
   const results = initialState().results;
@@ -30,5 +30,12 @@ describe("settlement", () => {
     const ticket = settleTicket({ ...baseTicket, legs: [{ marketId: "ml", gameId: "game-1", kind: "moneyline", subject: "Winner", side: "team1", label: "A", odds: 2 }] }, finalResults());
     expect(ticket.status).toBe("won");
     expect(ledger([ticket])).toEqual({ available: 110, totalStaked: 10, returns: 20, profit: 10 });
+  });
+
+  it("rejects a stake that would overdraw the available units", () => {
+    expect(canStake(0, 0.1)).toBe(false);
+    expect(canStake(25, 25)).toBe(true);
+    expect(canStake(25, 25.01)).toBe(false);
+    expect(canStake(25, -1)).toBe(false);
   });
 });

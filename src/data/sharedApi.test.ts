@@ -22,6 +22,16 @@ describe("shared Sheet state", () => {
     expect(results["game-1"].playerStats.alex.points).toBe(8);
   });
 
+  it("uses the Brad-playing scenario when the central toggle is enabled", () => {
+    const alternate = {
+      ...community,
+      config: { BRAD_PLAYS: true },
+      boxScores: [{ ...community.boxScores[0], scenario: "Brad Plays" as const, points: 12 }],
+    };
+    const results = resultsFromCommunity(alternate)!;
+    expect(results["game-1"].playerStats.alex.points).toBe(12);
+  });
+
   it("reconstructs immutable ticket snapshots", () => {
     const tickets = sharedTickets(community);
     expect(tickets[0].participant).toBe("Ben");

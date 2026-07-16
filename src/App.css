@@ -1482,9 +1482,9 @@ td input {
     position: fixed;
     z-index: 48;
     left: 50%;
-    bottom: env(safe-area-inset-bottom);
+    bottom: calc(58px + env(safe-area-inset-bottom));
     transform: translateX(-50%);
-    width: min(440px, calc(100vw));
+    width: min(440px, calc(100vw - 24px));
     min-height: 52px;
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 10px;

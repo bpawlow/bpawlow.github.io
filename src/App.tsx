@@ -5,10 +5,12 @@ import { exportState, importState, loadState, saveState } from "./data/persisten
 import { loadBasketballData, sheetPublicUrl } from "./data/googleSheets";
 import { gamesFromSchedule, isGameLocked, loadCommunityState, modelConfigFromCommunity, registerSharedParticipant, resultsFromCommunity, sharedTickets, submitSharedTicket } from "./data/sharedApi";
 import { formatAmerican, money } from "./model/odds";
-import { gradeLeg, ledger, settleTickets } from "./model/settlement";
+import { canStake, gradeLeg, ledger, settleTickets } from "./model/settlement";
 import { SimulationClient } from "./model/simulationClient";
 import { calculateStandings } from "./model/standings";
 import { hasContradictorySpreadMoneyline } from "./model/marketGuardrails";
+import { playerLeaderboard } from "./model/leaderboard";
+import { assignmentsForTeam } from "./model/rosters";
 import { GAMES, SCORING_RULES, TEAM_COLORS } from "./types";
 import type {
   BasketballData,
@@ -47,9 +49,7 @@ function sourceLabel(data: BasketballData): string {
 }
 
 function activeRoster(data: BasketballData, scenario: Scenario, teamId: TeamId, gameId?: GameId) {
-  const specific = gameId ? data.assignments.filter((item) => item.scenario === scenario && item.gameId === gameId && item.teamId === teamId) : [];
-  if (specific.length) return specific;
-  return data.assignments.filter((item) => item.scenario === scenario && !item.gameId && item.teamId === teamId);
+  return assignmentsForTeam(data.assignments, scenario, teamId, gameId);
 }
 
 function TeamPill({ team, names = DEFAULT_TEAM_NAMES }: { team: TeamId; names?: TeamNames }): ReactElement {
@@ -320,13 +320,7 @@ function LeaderboardView({ community, results, games, scenario }: { community: C
     return { name, tickets: tickets.length, ...ledger(tickets) };
   }).sort((a, b) => b.available - a.available || b.profit - a.profit || a.name.localeCompare(b.name));
 
-  const players = new Map<string, { name: string; games: Set<GameId>; points: number; rebounds: number; assists: number; threes: number }>();
-  for (const box of community.boxScores.filter((row) => row.scenario === scenario && row.played)) {
-    const current = players.get(box.playerId) ?? { name: box.playerName, games: new Set<GameId>(), points: 0, rebounds: 0, assists: 0, threes: 0 };
-    current.games.add(box.gameId); current.points += box.points; current.rebounds += box.rebounds; current.assists += box.assists; current.threes += box.threes;
-    players.set(box.playerId, current);
-  }
-  const playerRows = [...players.values()].sort((a, b) => (b.points + b.rebounds + b.assists) - (a.points + a.rebounds + a.assists));
+  const playerRows = playerLeaderboard(community.boxScores, scenario);
   return (
     <div className="page-stack">
       <div className="page-heading"><span className="eyebrow">Live from Google Sheets</span><h1>Leaderboards</h1><p>Betting standings and tournament stat leaders refresh automatically.</p></div>
@@ -339,7 +333,7 @@ function LeaderboardView({ community, results, games, scenario }: { community: C
       <section className="standings-card leaderboard-card">
         <div className="section-title"><div><span className="eyebrow">Box scores</span><h2>Player leaderboard</h2></div><span>Active roster</span></div>
         <div className="player-head"><span>Player</span><span>GP</span><span>PTS</span><span>REB</span><span>AST</span><span>3PM</span><span>PRA</span></div>
-        {playerRows.map((row, index) => <div className="player-leader-row" key={row.name}><span><b>{index + 1}</b>{row.name}</span><span>{row.games.size}</span><strong>{row.points}</strong><span>{row.rebounds}</span><span>{row.assists}</span><span>{row.threes}</span><strong>{row.points + row.rebounds + row.assists}</strong></div>)}
+        {playerRows.map((row, index) => <div className="player-leader-row" key={row.playerId}><span><b>{index + 1}</b>{row.name}</span><span>{row.games}</span><strong>{row.points}</strong><span>{row.rebounds}</span><span>{row.assists}</span><span>{row.threes}</span><strong>{row.pra}</strong></div>)}
         {!playerRows.length && <p className="leaderboard-empty">Player leaders appear after official box scores are marked Played.</p>}
       </section>
     </div>
@@ -537,7 +531,7 @@ export default function App(): ReactElement {
       decimalOdds: selections[0].decimalOdds,
       americanOdds: selections[0].americanOdds,
     } : parlayPrice;
-    if (!price || !Number.isFinite(stakeNumber) || stakeNumber <= 0 || stakeNumber > account.available) return;
+    if (!price || !canStake(account.available, stakeNumber)) return;
     submittingRef.current = true;
     setSubmitting(true);
     const ticket: Ticket = {
