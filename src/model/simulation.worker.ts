@@ -354,7 +354,10 @@ function buildMarkets(
 
 function initialize(data: BasketballData, scenario: Scenario): SimulationSummary {
   eventOutcomes = new Map();
-  currentModelConfig = data.modelConfig ?? DEFAULT_MODEL_CONFIG;
+  // Cached data from an older build may not have modelConfig yet. Normalize
+  // it once here so every simulation/pricing path uses a valid configuration.
+  const modelConfig = data.modelConfig ?? DEFAULT_MODEL_CONFIG;
+  currentModelConfig = modelConfig;
   const gameDefinitions = data.games?.length ? data.games : GAMES;
   const defaultRoster = rosterFor(data, scenario);
   const allPlayerIds = new Set(Object.values(defaultRoster).flat().map((item) => item.player.id));
@@ -378,7 +381,7 @@ function initialize(data: BasketballData, scenario: Scenario): SimulationSummary
     for (const game of gameDefinitions) {
       const currentTeams = new Set<TeamId>([game.team1, game.team2]);
       const consecutive = new Set<TeamId>([...currentTeams].filter((team) => priorTeams.has(team)));
-      simulateGame(game, gameArrays.get(game.id)!, sample, rosters.get(game.id)!, data.modelConfig, playerForm, consecutive, rng);
+      simulateGame(game, gameArrays.get(game.id)!, sample, rosters.get(game.id)!, modelConfig, playerForm, consecutive, rng);
       priorTeams = currentTeams;
     }
   }
@@ -390,7 +393,7 @@ function initialize(data: BasketballData, scenario: Scenario): SimulationSummary
       + teamMetric(defaultRoster[team], "modelDefense") * 0.2 + teamMetric(defaultRoster[team], "rebounding") * 0.05
     ).toFixed(2));
   }
-  return { markets: buildMarkets(gameArrays, rosters, gameDefinitions, data.modelConfig), simulationCount: SAMPLE_COUNT, scenario, teamRatings, generatedAt: new Date().toISOString() };
+  return { markets: buildMarkets(gameArrays, rosters, gameDefinitions, modelConfig), simulationCount: SAMPLE_COUNT, scenario, teamRatings, generatedAt: new Date().toISOString() };
 }
 
 function priceParlay(marketIds: string[]): ParlayPrice {
