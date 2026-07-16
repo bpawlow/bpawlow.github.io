@@ -98,7 +98,16 @@ Do not manually maintain the repeated team-name cells in `Schedule & Results`, b
 
 The tournament uses three stable internal team IDs: `Team A`, `Team B`, and `Team C`. Display names can change independently.
 
-To move a player for the whole tournament, edit their `Team` value in `Team Assignments` for the applicable roster configuration. Do not change the `Team A/B/C` identifiers themselves.
+To move a player for the whole tournament:
+
+1. Close betting for the affected games.
+2. In `Team Assignments`, edit the player’s `Team` value for the applicable roster configuration.
+3. Remove the player’s old assignment and add a replacement/swap if each team must remain full.
+4. Repeat the change in the alternate roster configuration if Brad’s roster is also affected.
+5. Confirm each team has the intended players and no player appears twice in that scenario.
+6. Increment `MODEL_VERSION` and refresh the website.
+
+Use only the stable IDs `Team A`, `Team B`, and `Team C` in the Team column. Do not change those IDs to the public display names.
 
 To add or rearrange a game, add or edit one row in `Schedule & Results`:
 
@@ -110,7 +119,17 @@ To add or rearrange a game, add or edit one row in `Schedule & Results`:
 
 The visible team-name columns are synchronized automatically from `App Config`; edit the ID columns to change a matchup. The website displays the added marketable game after its next shared sync. The latest Apps Script also creates missing box-score rows for the new game.
 
-For a one-game mixed roster, add rows to `Game Rosters` with the game ID, `DEFAULT` or `ALTERNATE` roster configuration, canonical team ID, player, and rotation share. A game-specific roster overrides the default `Team Assignments` roster for that game. Use `EXHIBITION` plus `Counts Toward Standings? = FALSE` for a casual post-tournament game. A championship can be counted or excluded according to the organizer’s choice.
+For a one-game mixed roster:
+
+1. Close betting for that game.
+2. In `Game Rosters`, add or edit rows with the game ID, `DEFAULT` or `ALTERNATE` roster configuration, canonical team ID, player, and rotation share.
+3. Enter the complete participating roster for that game and configuration—not only the player who moved. A game-specific row causes the game-specific roster to override the default roster.
+4. Leave the bye team out of the game-specific rows.
+5. Increment `MODEL_VERSION` and refresh the website.
+
+For example, if Peter replaces Josh on Team B in `game-2`, enter all Team B and Team C players for `game-2` under `DEFAULT`, with Peter included and Josh removed. If no game-specific rows remain for a game/configuration, the app falls back to `Team Assignments`.
+
+For a last-minute change to an upcoming game, use `Game Rosters` instead of rewriting completed-game assignments or historical box scores. Existing tickets retain their original labels, odds, and canonical team identity. Verify the updated markets and roster before reopening betting. Use `EXHIBITION` plus `Counts Toward Standings? = FALSE` for a casual post-tournament game. A championship can be counted or excluded according to the organizer’s choice.
 
 After changing rosters or model settings, increment `MODEL_VERSION`, refresh the website, and do not change accepted betting assumptions without closing betting and reviewing existing tickets. Player lines are always selected near the simulated 50/50 threshold; there are no editable quantile settings. The most useful advanced controls are `ASSIST_ROLE_EXPONENT`, `ASSIST_ROLE_WEIGHT`, `REBOUND_ROLE_EXPONENT`, and `REBOUND_ROLE_WEIGHT`, which adjust how strongly elite playmakers and rebounders receive individual credit. The points and three-point sensitivity controls are calibration-only; leave them at their defaults unless you are deliberately recalibrating the model.
 
