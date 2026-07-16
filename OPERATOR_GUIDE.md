@@ -7,7 +7,7 @@ Google Sheets is the event's central datastore. Google Apps Script is a small co
 | Data | Source of truth | Editor |
 | --- | --- | --- |
 | Player ratings | `Quick Player Ratings` | Organizer before betting opens |
-| Brad scenario | `App Config!B2` | Organizer before betting opens |
+| Roster configuration | `App Config!B2` | Organizer before betting opens |
 | Betting status | `App Config!B3` and per-game lock cells | Organizer |
 | Official scores | `Schedule & Results` | Scorekeeper |
 | Official player stats | `Box Scores` | Scorekeeper |
@@ -44,14 +44,12 @@ When someone enters a display name and presses **Enter sportsbook**, the app aut
 
 ## Before the tournament
 
-1. Decide whether Brad is playing.
-2. Set `App Config!B2`:
-   - `FALSE` = Brad Out rosters
-   - `TRUE` = Brad Plays rosters
-3. Do not change this after accepting bets. If it must change, close betting, increment `MODEL_VERSION`, refresh the website, and void/review old-scenario tickets.
+1. Decide which roster configuration is active.
+2. Set `App Config!B2` to `FALSE` for the default roster or `TRUE` for the alternate roster.
+3. Do not change this after accepting bets. If it must change, close betting, increment `MODEL_VERSION`, refresh the website, and void/review tickets created under the previous roster configuration.
 4. Set `BETTING_OPEN` to `TRUE`.
 5. Confirm all games are `UPCOMING`, scores are blank, `Final?` is false, and the desired games have `Betting Locked?` false.
-6. Open the website, press **Refresh ratings**, and verify the header shows **Shared Sheet live** and the correct Brad scenario.
+6. Open the website, press **Refresh ratings**, and verify the header shows **Shared Sheet live** and the expected teams and players.
 
 ## Locking and running a game
 
@@ -64,7 +62,7 @@ Immediately before a game begins:
 After the game:
 
 1. Enter the final team scores in `Schedule & Results`.
-2. Go to `Box Scores` and filter to the correct `Game ID` and active Brad scenario.
+2. Go to `Box Scores` and filter to the correct `Game ID` and active roster configuration.
 3. Mark `Played?` true for each person who appeared.
 4. Enter:
    - `Points`: scoreboard points; inside basket = 2, beyond the arc = 3
@@ -82,7 +80,11 @@ The Apps Script will grade affected legs and tickets during the next sync. The w
 
 The board offers winner, spread, and full-game total markets. Team totals are intentionally excluded: in a first-to-21 format, every winning team finishes from 21 through 23, making its team total largely a duplicate of the moneyline and unusually sensitive to the final basket. Previously accepted team-total tickets remain supported by settlement logic.
 
-All straight markets—including game lines and player props—use a fixed 4.76% two-sided overround after the simulation calculates fair probabilities. A true 50/50 selection therefore displays at approximately `-110` on each side. Parlays are priced from their joint simulated outcomes so correlation is included, then receive a separate parlay margin that starts at 7.5% and increases modestly for additional legs.
+All straight markets—including game lines and player props—use a configurable 6% default two-sided overround after the simulation calculates fair probabilities. Rebounds, assists, and 3PM use conservative 56%, 58%, and 56% simulated percentiles by default; this raises easy lines without adding arbitrary units disconnected from the distribution. The model also uses pickup-game priors for missed shots, three-point attempts, assists, and offensive rebounds. Parlays are priced from their joint simulated outcomes so correlation is included, then receive a separate 8% default parlay margin that increases modestly for additional legs.
+
+The pricing controls are in `App Config`. Adjust them only after reviewing test lines and preserving the same settings for all accepted tickets.
+
+The app blocks a favorite spread combined with the opposing team’s moneyline because those selections cannot both win. An underdog spread plus the opposing favorite moneyline remains allowed because that combination can win together.
 
 ## Team display names
 
@@ -92,12 +94,32 @@ The script copies those central names into every `Team 1`, `Team 2`, and `Bye` p
 
 Do not manually maintain the repeated team-name cells in `Schedule & Results`, because the script will synchronize them from `App Config`. Do not rename Team A/B/C in `Team Assignments`; those values are stable internal identifiers connecting players to the pricing and settlement models.
 
+## Changing teams, matchups, and adding games
+
+The tournament uses three stable internal team IDs: `Team A`, `Team B`, and `Team C`. Display names can change independently.
+
+To move a player for the whole tournament, edit their `Team` value in `Team Assignments` for the applicable roster configuration. Do not change the `Team A/B/C` identifiers themselves.
+
+To add or rearrange a game, add or edit one row in `Schedule & Results`:
+
+- Give it a unique `Game ID` such as `game-4` and the next `Game #`.
+- Set `Game Type` to `TOURNAMENT`, `CHAMPIONSHIP`, or `EXHIBITION`.
+- Enter canonical `Team 1 ID`, `Team 2 ID`, and optionally `Bye ID`.
+- Set `Counts Toward Standings?` and `Betting Enabled?` explicitly.
+- Leave scores blank, `Final?` false, and `Betting Locked?` false until ready.
+
+The visible team-name columns are synchronized automatically from `App Config`; edit the ID columns to change a matchup. The website displays the added marketable game after its next shared sync. The latest Apps Script also creates missing box-score rows for the new game.
+
+For a one-game mixed roster, add rows to `Game Rosters` with the game ID, `DEFAULT` or `ALTERNATE` roster configuration, canonical team ID, player, and rotation share. A game-specific roster overrides the default `Team Assignments` roster for that game. Use `EXHIBITION` plus `Counts Toward Standings? = FALSE` for a casual post-tournament game. A championship can be counted or excluded according to the organizer’s choice.
+
+After changing rosters or model settings, increment `MODEL_VERSION`, refresh the website, and do not change accepted betting assumptions without closing betting and reviewing existing tickets.
+
 ## Leaderboards
 
 The website’s Leaderboard screen has two tables:
 
 - **Betting leaderboard:** units available and profit after settled tickets, ordered by bankroll.
-- **Player leaderboard:** games, points, rebounds, assists, made threes, and PRA for the active Brad scenario.
+- **Player leaderboard:** games, points, rebounds, assists, made threes, and PRA for the active roster configuration.
 
 The spreadsheet contains equivalent `Betting Leaderboard` and `Player Leaderboard` tabs. Do not manually edit their calculated output.
 
@@ -105,7 +127,7 @@ The spreadsheet contains equivalent `Betting Leaderboard` and `Player Leaderboar
 
 - Each participant starts with 100 units.
 - Apps Script checks the shared `Bets` ledger before accepting a ticket, preventing a bettor from staking more than the shared available balance.
-- Every ticket stores the original scenario, odds, stake, payout, model version, and immutable leg details.
+- Every ticket stores the original roster configuration, odds, stake, payout, model version, and immutable leg details.
 - Do not manually alter `Bets` or `Bet Legs` during play unless correcting an organizer-confirmed data error.
 - If a result is corrected, the settlement pass recomputes ticket states from the official records.
 
@@ -141,7 +163,7 @@ Every shared sync automatically normalizes each skill category to a group averag
 
 ## Important security limitation
 
-This is party-grade infrastructure. The Sheet is public and the Apps Script endpoint accepts anonymous requests because a fully front-end app cannot safely hold a secret. The script validates duplicate ticket IDs, bankroll, active scenario, and game locks, but a technically motivated guest could still fabricate requests.
+This is party-grade infrastructure. The Sheet is public and the Apps Script endpoint accepts anonymous requests because a fully front-end app cannot safely hold a secret. The script validates duplicate ticket IDs, bankroll, active roster configuration, and game locks, but a technically motivated guest could still fabricate requests.
 
 For a friendly bachelor-party contest, organizer review of the `Bets` sheet is usually sufficient. Strong authentication would require Google sign-in or a real backend.
 

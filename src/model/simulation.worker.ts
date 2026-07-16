@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { GAMES, SCORING_RULES } from "../types";
+import { DEFAULT_MODEL_CONFIG, GAMES, SCORING_RULES } from "../types";
 import type {
   BasketballData,
   GameDefinition,
@@ -11,15 +11,12 @@ import type {
   SimulationSummary,
   StatKey,
   TeamId,
+  ModelConfig,
 } from "../types";
 import { clamp, offeredPrice } from "./odds";
 
 const ctx: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobalScope;
 const SAMPLE_COUNT = 80_000;
-// Standard two-sided sportsbook vig: a fair 50/50 market prices near -110/-110.
-// Multiplying both fair probabilities by 1.047619 creates a 4.76% overround.
-const STRAIGHT_VIG = 0.047619;
-const PARLAY_BASE_HOLD = 0.075;
 
 interface RosterPlayer {
   player: Player;
@@ -38,6 +35,7 @@ type IncomingMessage = InitMessage | PriceMessage;
 
 let eventOutcomes = new Map<string, Uint8Array>();
 let currentSummary: SimulationSummary | null = null;
+let currentModelConfig: ModelConfig = DEFAULT_MODEL_CONFIG;
 
 class Rng {
   private state: number;
@@ -76,10 +74,12 @@ function pickWeighted<T>(items: T[], weight: (item: T) => number, rng: Rng): T {
   return items[items.length - 1];
 }
 
-function rosterFor(data: BasketballData, scenario: Scenario): Record<TeamId, RosterPlayer[]> {
+function rosterFor(data: BasketballData, scenario: Scenario, gameId?: GameId): Record<TeamId, RosterPlayer[]> {
   const players = new Map(data.players.map((player) => [player.id, player]));
   const roster = { "Team A": [], "Team B": [], "Team C": [] } as Record<TeamId, RosterPlayer[]>;
-  for (const assignment of data.assignments.filter((item) => item.scenario === scenario)) {
+  const specific = gameId ? data.assignments.filter((item) => item.scenario === scenario && item.gameId === gameId) : [];
+  const assignments = specific.length ? specific : data.assignments.filter((item) => item.scenario === scenario && !item.gameId);
+  for (const assignment of assignments) {
     const player = players.get(assignment.playerId);
     if (player?.active) roster[assignment.teamId].push({ player, share: assignment.rotationShare });
   }
@@ -88,7 +88,7 @@ function rosterFor(data: BasketballData, scenario: Scenario): Record<TeamId, Ros
 
 function teamMetric(roster: RosterPlayer[], metric: keyof Pick<Player, "overall" | "modelOffense" | "modelDefense" | "rebounding" | "stamina" | "playmaking">): number {
   const denominator = roster.reduce((sum, item) => sum + item.share, 0);
-  return roster.reduce((sum, item) => sum + item.player[metric] * item.share, 0) / denominator;
+  return denominator ? roster.reduce((sum, item) => sum + item.player[metric] * item.share, 0) / denominator : 5;
 }
 
 function statKey(playerId: string, stat: StatKey): string { return `${playerId}:${stat}`; }
@@ -114,6 +114,7 @@ function simulateGame(
   arrays: GameArrays,
   sample: number,
   roster: Record<TeamId, RosterPlayer[]>,
+  modelConfig: ModelConfig,
   playerForm: Map<string, number>,
   consecutive: Set<TeamId>,
   rng: Rng,
@@ -146,7 +147,7 @@ function simulateGame(
       continue;
     }
 
-    const threePointRate = clamp(0.18 + shooter.player.shooting * 0.025 + shooter.player.propUsage * 0.06, 0.18, 0.5);
+    const threePointRate = clamp(0.22 + shooter.player.shooting * 0.025 + shooter.player.propUsage * 0.06, modelConfig.threePointRateMin, modelConfig.threePointRateMax);
     const isThree = rng.next() < threePointRate;
     const baseMake = isThree ? 0.29 : 0.49;
     const skill = isThree ? shooter.player.shooting : (shooter.player.scoring * 0.7 + shooter.player.overall * 0.3);
@@ -164,7 +165,7 @@ function simulateGame(
       if (isThree) addStat(arrays, shooter.player.id, "threes", sample, 1);
 
       const potentialAssisters = offenseRoster.filter((item) => item.player.id !== shooter.player.id);
-      const assistChance = clamp(0.34 + (teamPlaymaking[offense] - 5) * 0.035, 0.22, 0.7);
+      const assistChance = clamp(modelConfig.assistBaseRate + (teamPlaymaking[offense] - 5) * modelConfig.assistPlaymakingSlope, 0.22, 0.75);
       if (potentialAssisters.length && rng.next() < assistChance) {
         const assister = pickWeighted(potentialAssisters, ({ player, share }) => share * (0.3 + player.playmaking / 6), rng);
         addStat(arrays, assister.player.id, "assists", sample, 1);
@@ -175,7 +176,7 @@ function simulateGame(
 
     const offenseRebounding = teamMetric(offenseRoster, "rebounding");
     const defenseRebounding = teamMetric(defenseRoster, "rebounding");
-    const offensiveReboundChance = clamp(0.24 + (offenseRebounding - defenseRebounding) * 0.018, 0.13, 0.38);
+    const offensiveReboundChance = clamp(modelConfig.offensiveReboundBaseRate + (offenseRebounding - defenseRebounding) * 0.018, 0.13, 0.42);
     const offensiveBoard = rng.next() < offensiveReboundChance;
     const reboundRoster = offensiveBoard ? offenseRoster : defenseRoster;
     const rebounder = pickWeighted(reboundRoster, ({ player, share }) => share * (0.25 + player.rebounding / 5), rng);
@@ -203,6 +204,11 @@ function median(values: Uint8Array | Int16Array): number {
     if (cumulative > target) return index + min;
   }
   return min;
+}
+
+function quantile(values: Uint8Array, probability: number): number {
+  const sorted = Array.from(values).sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.floor(Math.max(0, Math.min(1, probability)) * (sorted.length - 1)))];
 }
 
 function mean(values: Int16Array): number {
@@ -238,7 +244,9 @@ function lineText(line: number): string { return line > 0 ? `+${line}` : `${line
 
 function buildMarkets(
   games: Map<GameId, GameArrays>,
-  roster: Record<TeamId, RosterPlayer[]>,
+  rosters: Map<GameId, Record<TeamId, RosterPlayer[]>>,
+  gameDefinitions: GameDefinition[],
+  modelConfig: ModelConfig,
 ): MarketSelection[] {
   const markets: MarketSelection[] = [];
 
@@ -250,15 +258,17 @@ function buildMarkets(
   ) => {
     [first, second].forEach((selection, index) => {
       const probability = fairProbability(pair[index]);
-      const price = offeredPrice(probability, STRAIGHT_VIG);
+      const price = offeredPrice(probability, modelConfig.straightVig);
       const market: MarketSelection = { ...base, ...selection, fairProbability: probability, ...price };
       markets.push(market);
       eventOutcomes.set(market.id, pair[index]);
     });
   };
 
-  for (const game of GAMES) {
+  for (const game of gameDefinitions) {
+    if (!game.bettingEnabled) continue;
     const arrays = games.get(game.id)!;
+    const roster = rosters.get(game.id)!;
     const groupBase = { gameId: game.id, gameNumber: game.number };
     const margin = new Int16Array(SAMPLE_COUNT);
     const total = new Uint8Array(SAMPLE_COUNT);
@@ -273,8 +283,8 @@ function buildMarkets(
 
     registerPair(
       { ...groupBase, groupId: `${game.id}:ml`, kind: "moneyline", category: "Game lines", subject: "Winner" },
-      { id: `${game.id}:ml:${game.team1}`, side: "team1", label: `${game.team1} to win`, shortLabel: game.team1 },
-      { id: `${game.id}:ml:${game.team2}`, side: "team2", label: `${game.team2} to win`, shortLabel: game.team2 },
+      { id: `${game.id}:ml:${game.team1}`, side: "team1", teamId: game.team1, label: `${game.team1} to win`, shortLabel: game.team1 },
+      { id: `${game.id}:ml:${game.team2}`, side: "team2", teamId: game.team2, label: `${game.team2} to win`, shortLabel: game.team2 },
       [moneyline1, moneyline2],
     );
 
@@ -323,7 +333,11 @@ function buildMarkets(
         points: "Points", rebounds: "Rebounds", assists: "Assists", threes: "3-pointers", pr: "Pts + Reb", pa: "Pts + Ast", ra: "Reb + Ast", pra: "PRA",
       };
       for (const [stat, values] of statValues) {
-        const line = halfLine(median(values));
+        const lineQuantile = stat === "rebounds" ? modelConfig.reboundLineQuantile
+          : stat === "assists" ? modelConfig.assistLineQuantile
+            : stat === "threes" ? modelConfig.threesLineQuantile
+              : ["pr", "pa", "ra", "pra"].includes(stat) ? modelConfig.comboLineQuantile : 0.5;
+        const line = halfLine(quantile(values, lineQuantile));
         const pair = outcomesAbove(values, line);
         const groupId = `${game.id}:player:${player.id}:${stat}`;
         registerPair(
@@ -340,10 +354,18 @@ function buildMarkets(
 
 function initialize(data: BasketballData, scenario: Scenario): SimulationSummary {
   eventOutcomes = new Map();
-  const roster = rosterFor(data, scenario);
-  const allPlayerIds = new Set(Object.values(roster).flat().map((item) => item.player.id));
+  currentModelConfig = data.modelConfig ?? DEFAULT_MODEL_CONFIG;
+  const gameDefinitions = data.games?.length ? data.games : GAMES;
+  const defaultRoster = rosterFor(data, scenario);
+  const allPlayerIds = new Set(Object.values(defaultRoster).flat().map((item) => item.player.id));
   const gameArrays = new Map<GameId, GameArrays>();
-  for (const game of GAMES) gameArrays.set(game.id, createGameArrays([...roster[game.team1], ...roster[game.team2]]));
+  const rosters = new Map<GameId, Record<TeamId, RosterPlayer[]>>();
+  for (const game of gameDefinitions) {
+    const roster = rosterFor(data, scenario, game.id);
+    rosters.set(game.id, roster);
+    for (const player of Object.values(roster).flat()) allPlayerIds.add(player.player.id);
+    gameArrays.set(game.id, createGameArrays([...roster[game.team1], ...roster[game.team2]]));
+  }
   const rng = new Rng(scenario === "Brad Plays" ? 20260816 : 20260815);
 
   for (let sample = 0; sample < SAMPLE_COUNT; sample += 1) {
@@ -353,10 +375,10 @@ function initialize(data: BasketballData, scenario: Scenario): SimulationSummary
       playerForm.set(playerId, rng.normal() * 0.018 * player.volatility);
     }
     let priorTeams = new Set<TeamId>();
-    for (const game of GAMES) {
+    for (const game of gameDefinitions) {
       const currentTeams = new Set<TeamId>([game.team1, game.team2]);
       const consecutive = new Set<TeamId>([...currentTeams].filter((team) => priorTeams.has(team)));
-      simulateGame(game, gameArrays.get(game.id)!, sample, roster, playerForm, consecutive, rng);
+      simulateGame(game, gameArrays.get(game.id)!, sample, rosters.get(game.id)!, data.modelConfig, playerForm, consecutive, rng);
       priorTeams = currentTeams;
     }
   }
@@ -364,11 +386,11 @@ function initialize(data: BasketballData, scenario: Scenario): SimulationSummary
   const teamRatings = {} as Record<TeamId, number>;
   for (const team of ["Team A", "Team B", "Team C"] as TeamId[]) {
     teamRatings[team] = Number((
-      teamMetric(roster[team], "overall") * 0.45 + teamMetric(roster[team], "modelOffense") * 0.3
-      + teamMetric(roster[team], "modelDefense") * 0.2 + teamMetric(roster[team], "rebounding") * 0.05
+      teamMetric(defaultRoster[team], "overall") * 0.45 + teamMetric(defaultRoster[team], "modelOffense") * 0.3
+      + teamMetric(defaultRoster[team], "modelDefense") * 0.2 + teamMetric(defaultRoster[team], "rebounding") * 0.05
     ).toFixed(2));
   }
-  return { markets: buildMarkets(gameArrays, roster), simulationCount: SAMPLE_COUNT, scenario, teamRatings, generatedAt: new Date().toISOString() };
+  return { markets: buildMarkets(gameArrays, rosters, gameDefinitions, data.modelConfig), simulationCount: SAMPLE_COUNT, scenario, teamRatings, generatedAt: new Date().toISOString() };
 }
 
 function priceParlay(marketIds: string[]): ParlayPrice {
@@ -388,7 +410,7 @@ function priceParlay(marketIds: string[]): ParlayPrice {
     if (allWin && hasEligible) wins += 1;
   }
   const fairProbability = (wins + 0.5) / (eligible + 1);
-  const hold = PARLAY_BASE_HOLD + Math.max(0, marketIds.length - 2) * 0.018;
+  const hold = (currentSummary ? currentModelConfig.parlayBaseVig : 0.08) + Math.max(0, marketIds.length - 2) * 0.018;
   return { fairProbability, ...offeredPrice(fairProbability, hold), sampleWins: wins, eligibleSamples: eligible };
 }
 

@@ -116,7 +116,7 @@ audit.conditional_formatting.add(f"E2:E{audit.max_row}", ColorScaleRule(start_ty
 
 config = new_sheet(wb, "App Config", ["Key", "Value", "Description", "Who edits this"], {"A": 25, "B": 42, "C": 70, "D": 24})
 config_rows = [
-    ("BRAD_PLAYS", False, "FALSE uses Brad Out rosters; TRUE uses Brad Plays rosters.", "Organizer"),
+    ("BRAD_PLAYS", False, "FALSE uses the default roster; TRUE uses the alternate roster.", "Organizer"),
     ("BETTING_OPEN", True, "Set FALSE to stop new centralized bets.", "Organizer"),
     ("EVENT_ID", "bachelor-basketball-2026", "Stable identifier stored on every ticket.", "Leave unchanged"),
     ("MODEL_VERSION", 2, "Increment after materially changing ratings or pricing assumptions.", "Organizer"),
@@ -126,31 +126,44 @@ config_rows = [
     ("TEAM_A_NAME", "Team A", "Central display name used throughout the Sheet and website.", "Organizer"),
     ("TEAM_B_NAME", "Team B", "Central display name used throughout the Sheet and website.", "Organizer"),
     ("TEAM_C_NAME", "Team C", "Central display name used throughout the Sheet and website.", "Organizer"),
+    ("STRAIGHT_VIG", 0.06, "Straight-market overround used for game lines and player props.", "Organizer"),
+    ("PARLAY_BASE_VIG", 0.08, "Base parlay margin applied after joint simulation pricing.", "Organizer"),
+    ("REBOUND_LINE_QUANTILE", 0.56, "Conservative rebound line percentile.", "Organizer"),
+    ("ASSIST_LINE_QUANTILE", 0.58, "Conservative assist line percentile.", "Organizer"),
+    ("THREES_LINE_QUANTILE", 0.56, "Conservative made-three line percentile.", "Organizer"),
+    ("COMBO_LINE_QUANTILE", 0.55, "Conservative combo-prop line percentile.", "Organizer"),
+    ("THREE_POINT_RATE_MIN", 0.22, "Minimum amateur pickup three-point attempt rate.", "Organizer"),
+    ("THREE_POINT_RATE_MAX", 0.55, "Maximum amateur pickup three-point attempt rate.", "Organizer"),
+    ("ASSIST_BASE_RATE", 0.40, "Base chance that a made basket receives an assist.", "Organizer"),
+    ("ASSIST_PLAYMAKING_SLOPE", 0.04, "Assist-rate increase per playmaking rating point.", "Organizer"),
+    ("OFFENSIVE_REBOUND_BASE_RATE", 0.28, "Base chance a miss becomes an offensive rebound.", "Organizer"),
 ]
 for item in config_rows:
     config.append(item)
-for cell in (config["B2"], config["B3"], config["B7"], config["B8"], config["B9"], config["B10"], config["B11"]):
+for cell in (config.cell(row, 2) for row in range(2, config.max_row + 1) if config.cell(row, 4).value in ("Organizer", "Organizer setup")):
     cell.fill = PatternFill("solid", fgColor=YELLOW)
 add_validation(config, '"TRUE,FALSE"', "B2:B3")
 
 schedule = new_sheet(
     wb,
     "Schedule & Results",
-    ["Game ID", "Game #", "Team 1", "Team 2", "Bye", "Status", "Team 1 Score", "Team 2 Score", "Final?", "Betting Locked?", "Updated At", "Team 1 Box Points", "Team 2 Box Points", "Reconciliation"],
-    {"A": 13, "B": 10, "C": 14, "D": 14, "E": 14, "F": 14, "G": 16, "H": 16, "I": 11, "J": 18, "K": 24, "L": 20, "M": 20, "N": 24},
+    ["Game ID", "Game #", "Game Type", "Team 1 ID", "Team 1", "Team 2 ID", "Team 2", "Bye ID", "Bye", "Counts Toward Standings?", "Betting Enabled?", "Status", "Team 1 Score", "Team 2 Score", "Final?", "Betting Locked?", "Updated At", "Team 1 Box Points", "Team 2 Box Points", "Reconciliation"],
+    {"A": 13, "B": 10, "C": 16, "D": 13, "E": 16, "F": 13, "G": 16, "H": 13, "I": 16, "J": 23, "K": 18, "L": 14, "M": 16, "N": 16, "O": 11, "P": 18, "Q": 24, "R": 20, "S": 20, "T": 24},
 )
 games = [
-    ("game-1", 1, "Team A", "Team B", "Team C"),
-    ("game-2", 2, "Team B", "Team C", "Team A"),
-    ("game-3", 3, "Team C", "Team A", "Team B"),
+    ("game-1", 1, "Team A", "Team B", "Team C", "TOURNAMENT", True, True),
+    ("game-2", 2, "Team B", "Team C", "Team A", "TOURNAMENT", True, True),
+    ("game-3", 3, "Team C", "Team A", "Team B", "TOURNAMENT", True, True),
 ]
-for game_id, number, team1, team2, bye in games:
-    schedule.append([game_id, number, team1, team2, bye, "UPCOMING", "", "", False, False, ""])
+for game_id, number, team1, team2, bye, game_type, counts, betting in games:
+    schedule.append([game_id, number, game_type, team1, team1, team2, team2, bye, bye, counts, betting, "UPCOMING", "", "", False, False, "", "", "", ""])
 for row in range(2, 5):
-    for column in range(6, 12):
+    for column in range(10, 18):
         schedule.cell(row, column).fill = PatternFill("solid", fgColor=YELLOW)
-add_validation(schedule, '"UPCOMING,LIVE,FINAL"', "F2:F4")
-add_validation(schedule, '"TRUE,FALSE"', "I2:J4")
+add_validation(schedule, '"TOURNAMENT,CHAMPIONSHIP,EXHIBITION"', "C2:C100")
+add_validation(schedule, '"UPCOMING,LIVE,FINAL"', "L2:L100")
+add_validation(schedule, '"TRUE,FALSE"', "J2:K100")
+add_validation(schedule, '"TRUE,FALSE"', "O2:P100")
 
 assignments = wb["Team Assignments"]
 assignment_rows = []
@@ -164,6 +177,10 @@ for row in range(2, assignments.max_row + 1):
     for expanded_name in names:
         assignment_rows.append((scenario, team, expanded_name, 0.5 if name == "Berler/Jason" else 1.0))
 
+game_rosters = new_sheet(wb, "Game Rosters", ["Game ID", "Roster Configuration", "Team ID", "Player", "Rotation Share", "Active?", "Notes"], {"A": 13, "B": 22, "C": 13, "D": 22, "E": 16, "F": 11, "G": 42})
+add_validation(game_rosters, '"DEFAULT,ALTERNATE"', "B2:B100")
+add_validation(game_rosters, '"TRUE,FALSE"', "F2:F100")
+
 box = new_sheet(
     wb,
     "Box Scores",
@@ -171,7 +188,7 @@ box = new_sheet(
     {"A": 13, "B": 15, "C": 18, "D": 18, "E": 13, "F": 11, "G": 11, "H": 12, "I": 11, "J": 16, "K": 11, "L": 38},
 )
 for scenario in ("Brad Out", "Brad Plays"):
-    teams_by_game = {game_id: {team1, team2} for game_id, _, team1, team2, _ in games}
+    teams_by_game = {game_id: {team1, team2} for game_id, _, team1, team2, _, _, _, _ in games}
     for game_id, team_ids in teams_by_game.items():
         for row_scenario, team, player, share in assignment_rows:
             if row_scenario != scenario or team not in team_ids:
@@ -183,12 +200,13 @@ for row in range(2, box.max_row + 1):
         box.cell(row, column).fill = PatternFill("solid", fgColor=YELLOW)
 add_validation(box, '"TRUE,FALSE"', f"F2:F{box.max_row}")
 
+schedule_headers = {schedule.cell(1, column).value: column for column in range(1, schedule.max_column + 1)}
 for row in range(2, 5):
     scenario_formula = 'IF(\'App Config\'!$B$2,"Brad Plays","Brad Out")'
-    schedule.cell(row, 12).value = f'=SUMIFS(\'Box Scores\'!$G:$G,\'Box Scores\'!$A:$A,$A{row},\'Box Scores\'!$B:$B,{scenario_formula},\'Box Scores\'!$E:$E,$C{row},\'Box Scores\'!$F:$F,TRUE)'
-    schedule.cell(row, 13).value = f'=SUMIFS(\'Box Scores\'!$G:$G,\'Box Scores\'!$A:$A,$A{row},\'Box Scores\'!$B:$B,{scenario_formula},\'Box Scores\'!$E:$E,$D{row},\'Box Scores\'!$F:$F,TRUE)'
-    schedule.cell(row, 14).value = f'=IF(NOT($I{row}),"PENDING",IF(AND($G{row}=$L{row},$H{row}=$M{row}),"OK","CHECK PLAYER POINTS"))'
-    for column in range(12, 15):
+    score_columns = {"Team 1 Box Points": f'=SUMIFS(\'Box Scores\'!$G:$G,\'Box Scores\'!$A:$A,$A{row},\'Box Scores\'!$B:$B,{scenario_formula},\'Box Scores\'!$E:$E,$D{row},\'Box Scores\'!$F:$F,TRUE)', "Team 2 Box Points": f'=SUMIFS(\'Box Scores\'!$G:$G,\'Box Scores\'!$A:$A,$A{row},\'Box Scores\'!$B:$B,{scenario_formula},\'Box Scores\'!$E:$E,$F{row},\'Box Scores\'!$F:$F,TRUE)', "Reconciliation": f'=IF(NOT($O{row}),"PENDING",IF(AND($M{row}=$R{row},$N{row}=$S{row}),"OK","CHECK PLAYER POINTS"))'}
+    for header, formula in score_columns.items():
+        schedule.cell(row, schedule_headers[header]).value = formula
+    for column in range(schedule_headers["Team 1 Box Points"], schedule_headers["Reconciliation"] + 1):
         schedule.cell(row, column).fill = PatternFill("solid", fgColor=GREEN)
 
 participants = new_sheet(wb, "Participants", ["Bettor", "Active?", "Starting Units", "Notes"], {"A": 24, "B": 12, "C": 18, "D": 48})
@@ -256,7 +274,7 @@ readme["A1"] = "SHARED APP CONTROL CENTER"
 readme["A1"].font = Font(color=WHITE, bold=True, size=14)
 readme["A1"].fill = PatternFill("solid", fgColor=BLUE)
 instructions = [
-    ("Brad status", "Set App Config!B2 to TRUE or FALSE. The app uses this as the shared scenario."),
+    ("Roster mode", "Set App Config!B2 to TRUE or FALSE. The app uses this as the shared roster configuration."),
     ("Before each game", "Set Schedule & Results status and Betting Locked?; use FINAL only after scores and box scores are checked."),
     ("Official scores", "Enter team scores in Schedule & Results, then mark Final? TRUE."),
     ("Official box scores", "In Box Scores, use the active scenario rows, mark Played? TRUE, and enter PTS/REB/AST/3PM."),
@@ -274,7 +292,7 @@ readme.column_dimensions["A"].width = 24
 readme.column_dimensions["B"].width = 100
 
 preferred_order = [
-    "READ ME FIRST", "App Config", "Quick Player Ratings", "Rating Normalization", "Team Assignments", "Team Ratings",
+    "READ ME FIRST", "App Config", "Quick Player Ratings", "Rating Normalization", "Team Assignments", "Game Rosters", "Team Ratings",
     "Schedule & Results", "Box Scores", "Participants", "Bets", "Bet Legs", "Betting Leaderboard", "Player Leaderboard",
 ]
 wb._sheets = [wb[name] for name in preferred_order]

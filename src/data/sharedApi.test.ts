@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CommunityState } from "../types";
-import { resultsFromCommunity, sharedTickets } from "./sharedApi";
+import { gamesFromSchedule, resultsFromCommunity, sharedTickets } from "./sharedApi";
 
 const community: CommunityState = {
   config: { BRAD_PLAYS: false }, loadedAt: "2026-01-01", participants: ["Ben"],
@@ -27,5 +27,12 @@ describe("shared Sheet state", () => {
     expect(tickets[0].participant).toBe("Ben");
     expect(tickets[0].legs[0].gameId).toBe("game-1");
     expect(tickets[0].centralized).toBe(true);
+  });
+
+  it("maps added schedule rows and optional byes into game definitions", () => {
+    const games = gamesFromSchedule([
+      { gameId: "game-4", number: 4, type: "EXHIBITION", team1Id: "Team A", team1: "Team A", team2Id: "Team C", team2: "Team C", byeId: null, bye: "", countsTowardStandings: false, bettingEnabled: true, status: "UPCOMING", team1Score: null, team2Score: null, final: false, bettingLocked: false, updatedAt: "" },
+    ]);
+    expect(games[0]).toMatchObject({ id: "game-4", type: "EXHIBITION", team1: "Team A", team2: "Team C", bye: null, countsTowardStandings: false });
   });
 });

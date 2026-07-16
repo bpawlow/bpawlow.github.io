@@ -1,5 +1,5 @@
 import { GAMES } from "../types";
-import type { GameResult, PersistedState, StatKey, Ticket, TicketLeg, TicketStatus } from "../types";
+import type { GameDefinition, GameResult, PersistedState, StatKey, Ticket, TicketLeg, TicketStatus } from "../types";
 
 type Grade = "win" | "loss" | "push" | "pending";
 
@@ -19,10 +19,11 @@ function playerStat(result: GameResult, playerId: string, stat: StatKey): number
   return box.points + box.rebounds + box.assists;
 }
 
-export function gradeLeg(leg: TicketLeg, results: PersistedState["results"]): Grade {
+export function gradeLeg(leg: TicketLeg, results: PersistedState["results"], games: GameDefinition[] = GAMES): Grade {
   const result = results[leg.gameId];
   if (!result?.final || result.team1Score === null || result.team2Score === null) return "pending";
-  const game = GAMES.find((candidate) => candidate.id === leg.gameId)!;
+  const game = games.find((candidate) => candidate.id === leg.gameId);
+  if (!game) return "pending";
   const score = (team: string) => team === game.team1 ? result.team1Score! : result.team2Score!;
 
   if (leg.kind === "moneyline") {
@@ -49,8 +50,8 @@ export function gradeLeg(leg: TicketLeg, results: PersistedState["results"]): Gr
   return "pending";
 }
 
-export function settleTicket(ticket: Ticket, results: PersistedState["results"]): Ticket {
-  const grades = ticket.legs.map((leg) => gradeLeg(leg, results));
+export function settleTicket(ticket: Ticket, results: PersistedState["results"], games: GameDefinition[] = GAMES): Ticket {
+  const grades = ticket.legs.map((leg) => gradeLeg(leg, results, games));
   let status: TicketStatus = "pending";
   let settledReturn = 0;
   if (grades.includes("loss")) status = "lost";
@@ -65,8 +66,8 @@ export function settleTicket(ticket: Ticket, results: PersistedState["results"])
   return { ...ticket, status, settledReturn };
 }
 
-export function settleTickets(tickets: Ticket[], results: PersistedState["results"]): Ticket[] {
-  return tickets.map((ticket) => settleTicket(ticket, results));
+export function settleTickets(tickets: Ticket[], results: PersistedState["results"], games: GameDefinition[] = GAMES): Ticket[] {
+  return tickets.map((ticket) => settleTicket(ticket, results, games));
 }
 
 export function ledger(tickets: Ticket[]): { available: number; totalStaked: number; returns: number; profit: number } {

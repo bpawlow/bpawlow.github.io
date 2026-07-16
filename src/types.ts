@@ -1,6 +1,6 @@
 export type Scenario = "Brad Out" | "Brad Plays";
 export type TeamId = "Team A" | "Team B" | "Team C";
-export type GameId = "game-1" | "game-2" | "game-3";
+export type GameId = string;
 export type StatKey = "points" | "rebounds" | "assists" | "threes" | "pr" | "pa" | "ra" | "pra";
 export type MarketKind = "moneyline" | "spread" | "total" | "team-total" | "player-prop";
 
@@ -10,6 +10,34 @@ export const SCORING_RULES = {
   arcPoints: 3,
   maximumWinningScore: 23,
 } as const;
+
+export interface ModelConfig {
+  straightVig: number;
+  parlayBaseVig: number;
+  reboundLineQuantile: number;
+  assistLineQuantile: number;
+  threesLineQuantile: number;
+  comboLineQuantile: number;
+  threePointRateMin: number;
+  threePointRateMax: number;
+  assistBaseRate: number;
+  assistPlaymakingSlope: number;
+  offensiveReboundBaseRate: number;
+}
+
+export const DEFAULT_MODEL_CONFIG: ModelConfig = {
+  straightVig: 0.06,
+  parlayBaseVig: 0.08,
+  reboundLineQuantile: 0.56,
+  assistLineQuantile: 0.58,
+  threesLineQuantile: 0.56,
+  comboLineQuantile: 0.55,
+  threePointRateMin: 0.22,
+  threePointRateMax: 0.55,
+  assistBaseRate: 0.4,
+  assistPlaymakingSlope: 0.04,
+  offensiveReboundBaseRate: 0.28,
+};
 
 export interface Player {
   id: string;
@@ -38,11 +66,14 @@ export interface Assignment {
   playerName: string;
   rotationShare: number;
   notes: string;
+  gameId?: GameId;
 }
 
 export interface BasketballData {
   players: Player[];
   assignments: Assignment[];
+  games: GameDefinition[];
+  modelConfig: ModelConfig;
   source: "google-sheet" | "cached" | "built-in";
   loadedAt: string;
 }
@@ -52,7 +83,10 @@ export interface GameDefinition {
   number: number;
   team1: TeamId;
   team2: TeamId;
-  bye: TeamId;
+  bye: TeamId | null;
+  type: "TOURNAMENT" | "CHAMPIONSHIP" | "EXHIBITION";
+  countsTowardStandings: boolean;
+  bettingEnabled: boolean;
 }
 
 export interface MarketSelection {
@@ -146,14 +180,21 @@ export interface PersistedState {
   scenario: Scenario;
   sharedApiUrl: string;
   tickets: Ticket[];
-  results: Record<GameId, GameResult>;
+  results: Record<string, GameResult>;
 }
 
 export interface SharedScheduleRow {
   gameId: GameId;
+  number?: number;
+  type?: GameDefinition["type"];
+  team1Id?: TeamId;
+  team2Id?: TeamId;
+  byeId?: TeamId | null;
   team1: string;
   team2: string;
   bye: string;
+  countsTowardStandings?: boolean;
+  bettingEnabled?: boolean;
   status: "UPCOMING" | "LIVE" | "FINAL";
   team1Score: number | null;
   team2Score: number | null;
@@ -215,9 +256,9 @@ export interface CommunityState {
 }
 
 export const GAMES: GameDefinition[] = [
-  { id: "game-1", number: 1, team1: "Team A", team2: "Team B", bye: "Team C" },
-  { id: "game-2", number: 2, team1: "Team B", team2: "Team C", bye: "Team A" },
-  { id: "game-3", number: 3, team1: "Team C", team2: "Team A", bye: "Team B" },
+  { id: "game-1", number: 1, team1: "Team A", team2: "Team B", bye: "Team C", type: "TOURNAMENT", countsTowardStandings: true, bettingEnabled: true },
+  { id: "game-2", number: 2, team1: "Team B", team2: "Team C", bye: "Team A", type: "TOURNAMENT", countsTowardStandings: true, bettingEnabled: true },
+  { id: "game-3", number: 3, team1: "Team C", team2: "Team A", bye: "Team B", type: "TOURNAMENT", countsTowardStandings: true, bettingEnabled: true },
 ];
 
 export const TEAM_COLORS: Record<TeamId, string> = {

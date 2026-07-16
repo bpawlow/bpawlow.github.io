@@ -1,3 +1,4 @@
+import { DEFAULT_MODEL_CONFIG, GAMES } from "../types";
 import type { Assignment, BasketballData, Player, Scenario, TeamId } from "../types";
 import { normalizePlayers } from "../model/normalizeRatings";
 
@@ -147,7 +148,7 @@ function parseAssignments(csv: string, players: Player[]): Assignment[] {
 
 function normalize(ratingsCsv: string, assignmentsCsv: string, source: BasketballData["source"]): BasketballData {
   const players = normalizePlayers(parsePlayers(ratingsCsv));
-  return { players, assignments: parseAssignments(assignmentsCsv, players), source, loadedAt: new Date().toISOString() };
+  return { players, assignments: parseAssignments(assignmentsCsv, players), games: GAMES, modelConfig: DEFAULT_MODEL_CONFIG, source, loadedAt: new Date().toISOString() };
 }
 
 async function fetchTab(gid: string): Promise<string> {

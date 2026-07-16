@@ -3,11 +3,12 @@ import type { ChangeEvent, ReactElement } from "react";
 import "./App.css";
 import { exportState, importState, loadState, saveState } from "./data/persistence";
 import { loadBasketballData, sheetPublicUrl } from "./data/googleSheets";
-import { isGameLocked, loadCommunityState, registerSharedParticipant, resultsFromCommunity, sharedTickets, submitSharedTicket } from "./data/sharedApi";
+import { gamesFromSchedule, isGameLocked, loadCommunityState, modelConfigFromCommunity, registerSharedParticipant, resultsFromCommunity, sharedTickets, submitSharedTicket } from "./data/sharedApi";
 import { formatAmerican, money } from "./model/odds";
 import { gradeLeg, ledger, settleTickets } from "./model/settlement";
 import { SimulationClient } from "./model/simulationClient";
 import { calculateStandings } from "./model/standings";
+import { hasContradictorySpreadMoneyline } from "./model/marketGuardrails";
 import { GAMES, SCORING_RULES, TEAM_COLORS } from "./types";
 import type {
   BasketballData,
@@ -45,8 +46,10 @@ function sourceLabel(data: BasketballData): string {
   return "Offline snapshot";
 }
 
-function activeRoster(data: BasketballData, scenario: Scenario, teamId: TeamId) {
-  return data.assignments.filter((item) => item.scenario === scenario && item.teamId === teamId);
+function activeRoster(data: BasketballData, scenario: Scenario, teamId: TeamId, gameId?: GameId) {
+  const specific = gameId ? data.assignments.filter((item) => item.scenario === scenario && item.gameId === gameId && item.teamId === teamId) : [];
+  if (specific.length) return specific;
+  return data.assignments.filter((item) => item.scenario === scenario && !item.gameId && item.teamId === teamId);
 }
 
 function TeamPill({ team, names = DEFAULT_TEAM_NAMES }: { team: TeamId; names?: TeamNames }): ReactElement {
@@ -62,6 +65,7 @@ function canonicalizeTeamLabels(value: string, names: TeamNames): string {
     .sort((left, right) => names[right].length - names[left].length)
     .reduce((result, team) => result.split(names[team]).join(team), value);
 }
+
 
 function localizedSummary(summary: SimulationSummary, names: TeamNames): SimulationSummary {
   return {
@@ -163,16 +167,18 @@ function BetSlip({ selections, price, pricing, submitting, mobileOpen, stake, av
   );
 }
 
-function Sportsbook({ data, summary, teamNames, gameId, setGameId, selections, toggleMarket }: {
+function Sportsbook({ data, summary, games, teamNames, gameId, setGameId, selections, toggleMarket }: {
   data: BasketballData;
   summary: SimulationSummary;
+  games: BasketballData["games"];
   teamNames: TeamNames;
   gameId: GameId;
   setGameId: (game: GameId) => void;
   selections: MarketSelection[];
   toggleMarket: (market: MarketSelection) => void;
 }): ReactElement {
-  const game = GAMES.find((candidate) => candidate.id === gameId)!;
+  const game = games.find((candidate) => candidate.id === gameId) ?? games[0];
+  if (!game) return <div className="empty-page"><h2>No games configured</h2><p>Add a schedule row in the shared Sheet.</p></div>;
   const selectedIds = new Set(selections.map((item) => item.id));
   const gameMarkets = summary.markets.filter((market) => market.gameId === gameId);
   const grouped = (markets: MarketSelection[]) => {
@@ -189,17 +195,17 @@ function Sportsbook({ data, summary, teamNames, gameId, setGameId, selections, t
   return (
     <div className="sportsbook-content">
       <div className="game-tabs" role="tablist">
-        {GAMES.map((item) => <button type="button" role="tab" aria-selected={item.id === gameId} className={item.id === gameId ? "active" : ""} key={item.id} onClick={() => setGameId(item.id)}><span>Game {item.number}</span><small>{teamNames[item.team1]} vs {teamNames[item.team2]}</small></button>)}
+        {games.filter((item) => item.bettingEnabled).map((item) => <button type="button" role="tab" aria-selected={item.id === gameId} className={item.id === gameId ? "active" : ""} key={item.id} onClick={() => setGameId(item.id)}><span>Game {item.number}</span><small>{teamNames[item.team1]} vs {teamNames[item.team2]}</small></button>)}
       </div>
       <section className="matchup-hero">
         <div className="team-side">
           <TeamPill team={game.team1} names={teamNames} /><strong>{summary.teamRatings[game.team1].toFixed(1)}</strong><small>power rating</small>
-          <p>{activeRoster(data, summary.scenario, game.team1).map((item) => item.rotationShare < 1 ? `${item.playerName} (${item.rotationShare * 100}%)` : item.playerName).join(" · ")}</p>
+          <p>{activeRoster(data, summary.scenario, game.team1, game.id).map((item) => item.rotationShare < 1 ? `${item.playerName} (${item.rotationShare * 100}%)` : item.playerName).join(" · ")}</p>
         </div>
-        <div className="versus"><span>GAME {game.number}</span><b>VS</b><small>{teamNames[game.bye]} bye</small></div>
+        <div className="versus"><span>GAME {game.number}</span><b>VS</b><small>{game.bye ? `${teamNames[game.bye]} bye` : game.type}</small></div>
         <div className="team-side right">
           <TeamPill team={game.team2} names={teamNames} /><strong>{summary.teamRatings[game.team2].toFixed(1)}</strong><small>power rating</small>
-          <p>{activeRoster(data, summary.scenario, game.team2).map((item) => item.rotationShare < 1 ? `${item.playerName} (${item.rotationShare * 100}%)` : item.playerName).join(" · ")}</p>
+          <p>{activeRoster(data, summary.scenario, game.team2, game.id).map((item) => item.rotationShare < 1 ? `${item.playerName} (${item.rotationShare * 100}%)` : item.playerName).join(" · ")}</p>
         </div>
       </section>
 
@@ -211,9 +217,9 @@ function Sportsbook({ data, summary, teamNames, gameId, setGameId, selections, t
       <div className="team-props-stack">
         {([game.team1, game.team2] as TeamId[]).map((team) => (
           <section className="team-props-group" key={team}>
-            <div className="team-props-heading"><TeamPill team={team} names={teamNames} /><span>{activeRoster(data, summary.scenario, team).length} players</span></div>
+            <div className="team-props-heading"><TeamPill team={team} names={teamNames} /><span>{activeRoster(data, summary.scenario, team, game.id).length} players</span></div>
             <div className="player-prop-grid">
-              {activeRoster(data, summary.scenario, team).map((assignment) => {
+              {activeRoster(data, summary.scenario, team, game.id).map((assignment) => {
                 const pairs = propsByPlayer.get(assignment.playerId) ?? [];
                 return (
                   <details className="player-card" key={assignment.playerId}>
@@ -230,7 +236,7 @@ function Sportsbook({ data, summary, teamNames, gameId, setGameId, selections, t
   );
 }
 
-function TicketsView({ tickets, results, teamNames }: { tickets: Ticket[]; results: PersistedState["results"]; teamNames: TeamNames }): ReactElement {
+function TicketsView({ tickets, results, games, teamNames }: { tickets: Ticket[]; results: PersistedState["results"]; games: BasketballData["games"]; teamNames: TeamNames }): ReactElement {
   if (!tickets.length) return <div className="empty-page"><span>⌁</span><h2>No tickets yet</h2><p>Your straight bets and parlays will appear here.</p></div>;
   return (
     <div className="page-stack">
@@ -238,7 +244,7 @@ function TicketsView({ tickets, results, teamNames }: { tickets: Ticket[]; resul
       {tickets.slice().reverse().map((ticket) => (
         <article className="ticket-card" key={ticket.id}>
           <header><div><span className={`status ${ticket.status}`}>{ticket.status}</span><strong>{ticket.legs.length > 1 ? `${ticket.legs.length}-leg parlay` : "Straight bet"}</strong></div><time>{new Date(ticket.createdAt).toLocaleString()}</time></header>
-          <div className="ticket-legs">{ticket.legs.map((leg) => <div key={leg.marketId}><span className={`grade grade-${gradeLeg(leg, results)}`}></span><p><strong>{replaceTeamLabels(leg.label, teamNames)}</strong><small>{gradeLeg(leg, results)}</small></p></div>)}</div>
+          <div className="ticket-legs">{ticket.legs.map((leg) => <div key={leg.marketId}><span className={`grade grade-${gradeLeg(leg, results, games)}`}></span><p><strong>{replaceTeamLabels(leg.label, teamNames)}</strong><small>{gradeLeg(leg, results, games)}</small></p></div>)}</div>
           <footer><span>Stake <b>{money(ticket.stake)}</b></span><span>Odds <b>{formatAmerican(ticket.americanOdds)}</b></span><span>{ticket.status === "won" ? "Returned" : "To return"} <b>{money(ticket.status === "won" ? ticket.settledReturn : ticket.potentialReturn)}</b></span></footer>
         </article>
       ))}
@@ -250,15 +256,16 @@ function ScoreInput({ value, onChange, label }: { value: number | null; onChange
   return <label className="score-input"><span>{label}</span><input type="number" min="0" max={SCORING_RULES.maximumWinningScore} value={value ?? ""} onChange={(event) => onChange(event.target.value === "" ? null : Number(event.target.value))} /></label>;
 }
 
-function TournamentView({ data, scenario, teamNames, results, onResults, readOnly = false }: {
+function TournamentView({ data, games, scenario, teamNames, results, onResults, readOnly = false }: {
   data: BasketballData;
+  games: BasketballData["games"];
   scenario: Scenario;
   teamNames: TeamNames;
   results: PersistedState["results"];
   onResults: (results: PersistedState["results"]) => void;
   readOnly?: boolean;
 }): ReactElement {
-  const standings = calculateStandings(results);
+  const standings = calculateStandings(results, games);
   const updateGame = (gameId: GameId, patch: Partial<GameResult>) => onResults({ ...results, [gameId]: { ...results[gameId], ...patch } });
   const updatePlayer = (gameId: GameId, playerId: string, field: keyof PlayerBoxScore, value: number) => {
     const game = results[gameId];
@@ -274,9 +281,9 @@ function TournamentView({ data, scenario, teamNames, results, onResults, readOnl
         {standings.map((row) => <div className="standing-row" key={row.teamId}><span><b>{row.rank}</b><TeamPill team={row.teamId} names={teamNames} /></span><strong>{row.wins}</strong><span>{row.losses}</span><span>{row.pointsFor}</span><span>{row.pointsAgainst}</span><strong className={row.differential > 0 ? "positive" : row.differential < 0 ? "negative" : ""}>{row.differential > 0 ? "+" : ""}{row.differential}</strong></div>)}
         <p className="tie-note">Ties: wins → point differential → points scored → organizer coin flip.</p>
       </section>
-      {GAMES.map((game) => {
+      {games.map((game) => {
         const result = results[game.id];
-        const roster = [...activeRoster(data, scenario, game.team1), ...activeRoster(data, scenario, game.team2)];
+        const roster = [...activeRoster(data, scenario, game.team1, game.id), ...activeRoster(data, scenario, game.team2, game.id)];
         return (
           <details className="result-card" key={game.id}>
             <summary><span>Game {game.number}</span><strong>{teamNames[game.team1]} {result.team1Score ?? "–"} <i>vs</i> {teamNames[game.team2]} {result.team2Score ?? "–"}</strong><span className={result.final ? "final-tag" : "pending-tag"}>{result.final ? "Final" : "Open"}</span></summary>
@@ -304,9 +311,9 @@ function TournamentView({ data, scenario, teamNames, results, onResults, readOnl
   );
 }
 
-function LeaderboardView({ community, results, scenario }: { community: CommunityState | null; results: PersistedState["results"]; scenario: Scenario }): ReactElement {
+function LeaderboardView({ community, results, games, scenario }: { community: CommunityState | null; results: PersistedState["results"]; games: BasketballData["games"]; scenario: Scenario }): ReactElement {
   if (!community) return <div className="empty-page"><span>◎</span><h2>Connecting the shared leaderboard</h2><p>The app will retry automatically. Refresh the page if this message remains visible.</p></div>;
-  const centralized = settleTickets(sharedTickets(community), results);
+  const centralized = settleTickets(sharedTickets(community), results, games);
   const names = new Set([...community.participants, ...centralized.map((ticket) => ticket.participant)]);
   const bettors = [...names].map((name) => {
     const tickets = centralized.filter((ticket) => ticket.participant === name);
@@ -330,7 +337,7 @@ function LeaderboardView({ community, results, scenario }: { community: Communit
         {!bettors.length && <p className="leaderboard-empty">No centralized bets have been placed yet.</p>}
       </section>
       <section className="standings-card leaderboard-card">
-        <div className="section-title"><div><span className="eyebrow">Box scores</span><h2>Player leaderboard</h2></div><span>{scenario}</span></div>
+        <div className="section-title"><div><span className="eyebrow">Box scores</span><h2>Player leaderboard</h2></div><span>Active roster</span></div>
         <div className="player-head"><span>Player</span><span>GP</span><span>PTS</span><span>REB</span><span>AST</span><span>3PM</span><span>PRA</span></div>
         {playerRows.map((row, index) => <div className="player-leader-row" key={row.name}><span><b>{index + 1}</b>{row.name}</span><span>{row.games.size}</span><strong>{row.points}</strong><span>{row.rebounds}</span><span>{row.assists}</span><span>{row.threes}</span><strong>{row.points + row.rebounds + row.assists}</strong></div>)}
         {!playerRows.length && <p className="leaderboard-empty">Player leaders appear after official box scores are marked Played.</p>}
@@ -386,14 +393,19 @@ export default function App(): ReactElement {
     community?.config.TEAM_C_NAME,
     community?.schedule.map((row) => [row.gameId, row.team1, row.team2, row.bye]) ?? [],
   ]);
+  const activeGames = useMemo(() => {
+    if (community?.schedule.length) return gamesFromSchedule(community.schedule, community.config);
+    return data?.games ?? GAMES;
+  }, [community, data]);
+  const gameSignature = JSON.stringify(activeGames);
   const teamNames = useMemo(() => {
     const names = { ...DEFAULT_TEAM_NAMES };
     for (const row of community?.schedule ?? []) {
-      const game = GAMES.find((candidate) => candidate.id === row.gameId);
+      const game = gamesFromSchedule([row], community?.config ?? {})[0];
       if (!game) continue;
       if (row.team1?.trim()) names[game.team1] = row.team1.trim();
       if (row.team2?.trim()) names[game.team2] = row.team2.trim();
-      if (row.bye?.trim()) names[game.bye] = row.bye.trim();
+      if (row.bye?.trim() && game.bye) names[game.bye] = row.bye.trim();
     }
     const configuredNames: Array<[TeamId, unknown]> = [
       ["Team A", community?.config.TEAM_A_NAME],
@@ -418,9 +430,14 @@ export default function App(): ReactElement {
       return new Date(ticket.createdAt).getTime() > communityLoadedAt;
     })];
   }, [community, persisted.participant, persisted.tickets]);
-  const settledTickets = useMemo(() => settleTickets(accountTickets, officialResults), [accountTickets, officialResults]);
+  const settledTickets = useMemo(() => settleTickets(accountTickets, officialResults, activeGames), [accountTickets, officialResults, activeGames]);
   const account = useMemo(() => ledger(settledTickets), [settledTickets]);
   const requirement = Math.min(100, account.totalStaked);
+
+  useEffect(() => {
+    const firstMarketable = activeGames.find((game) => game.bettingEnabled) ?? activeGames[0];
+    if (firstMarketable && (!activeGames.some((game) => game.id === gameId) || !activeGames.find((game) => game.id === gameId)?.bettingEnabled)) setGameId(firstMarketable.id);
+  }, [activeGames, gameId]);
 
   useEffect(() => { saveState({ ...persisted, tickets: settledTickets }); }, [persisted, settledTickets]);
 
@@ -458,11 +475,11 @@ export default function App(): ReactElement {
   }, [community, persisted.tickets]);
 
   useEffect(() => {
-    if (!community || community.players.length < 12 || community.assignments.length < 24) return;
-    const signature = JSON.stringify([community.config.MODEL_VERSION, community.players, community.assignments]);
+    if (!community || !community.players.length || !community.assignments.length) return;
+    const signature = JSON.stringify([community.config.MODEL_VERSION, community.players, community.assignments, community.schedule, community.config]);
     if (signature === communityModelRef.current) return;
     communityModelRef.current = signature;
-    setData({ players: community.players, assignments: community.assignments, source: "google-sheet", loadedAt: community.loadedAt });
+    setData({ players: community.players, assignments: community.assignments, games: gamesFromSchedule(community.schedule, community.config), modelConfig: modelConfigFromCommunity(community), source: "google-sheet", loadedAt: community.loadedAt });
   }, [community]);
 
   useEffect(() => {
@@ -482,7 +499,7 @@ export default function App(): ReactElement {
     setLoadingText("Simulating 80,000 tournament outcomes…");
     client.initialize(data, persisted.scenario).then((next) => setSummary(localizedSummary(next, teamNames))).catch((reason) => setError(reason instanceof Error ? reason.message : "Simulation failed"));
     return () => client.destroy();
-  }, [data, persisted.scenario, teamNameSignature]);
+  }, [data, persisted.scenario, teamNameSignature, gameSignature]);
 
   useEffect(() => {
     if (!toast) return;
@@ -505,6 +522,7 @@ export default function App(): ReactElement {
     if (isGameLocked(community, market.gameId)) { setToast(`Game ${market.gameNumber} betting is locked`); return; }
     setSelections((current) => {
       if (current.some((item) => item.id === market.id)) return current.filter((item) => item.id !== market.id);
+      if (hasContradictorySpreadMoneyline(market, current)) { setToast("That spread and moneyline cannot both win"); return current; }
       const withoutOpposite = current.filter((item) => item.groupId !== market.groupId);
       if (withoutOpposite.length >= 6) { setToast("Parlays are limited to 6 legs"); return current; }
       return [...withoutOpposite, market];
@@ -584,9 +602,9 @@ export default function App(): ReactElement {
       try {
         const next = await loadCommunityState(persisted.sharedApiUrl);
         setCommunity(next);
-        if (next.players.length >= 12 && next.assignments.length >= 24) {
-          communityModelRef.current = JSON.stringify([next.config.MODEL_VERSION, next.players, next.assignments]);
-          setData({ players: next.players, assignments: next.assignments, source: "google-sheet", loadedAt: next.loadedAt });
+        if (next.players.length && next.assignments.length) {
+          communityModelRef.current = JSON.stringify([next.config.MODEL_VERSION, next.players, next.assignments, next.schedule, next.config]);
+          setData({ players: next.players, assignments: next.assignments, games: gamesFromSchedule(next.schedule, next.config), modelConfig: modelConfigFromCommunity(next), source: "google-sheet", loadedAt: next.loadedAt });
         }
         setToast("Shared Google Sheet refreshed");
       } catch (reason) { setCommunityError(reason instanceof Error ? reason.message : "Shared sync failed"); }
@@ -595,8 +613,6 @@ export default function App(): ReactElement {
     const loaded = await loadBasketballData(true); setData(loaded);
     setToast(`Ratings refreshed from ${sourceLabel(loaded)}`);
   };
-
-  const setScenario = (scenario: Scenario) => setPersisted((current) => ({ ...current, scenario }));
 
   const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -616,7 +632,6 @@ export default function App(): ReactElement {
           {(["sportsbook", "bets", "leaderboard", "tournament", "rules"] as Tab[]).map((item) => <button className={tab === item ? "active" : ""} type="button" key={item} onClick={() => setTab(item)}>{item === "sportsbook" ? "Markets" : item === "bets" ? "My bets" : item[0].toUpperCase() + item.slice(1)}</button>)}
         </nav>
         <div className="header-actions">
-          <label className="scenario-toggle"><span>Brad</span><select disabled={Boolean(community)} title={community ? "Controlled by App Config in the shared Sheet" : "Local scenario"} value={persisted.scenario} onChange={(event) => setScenario(event.target.value as Scenario)}><option>Brad Out</option><option>Brad Plays</option></select></label>
           <button className="balance-button" type="button" onClick={() => setShowProfile(true)}><span>{persisted.participant || "Player"}</span><strong>{money(account.available)} <small>u</small></strong></button>
         </div>
       </header>
@@ -631,10 +646,10 @@ export default function App(): ReactElement {
         <main className="loading-screen"><div className="loader-ball">21</div><h1>Building the board</h1><p>{loadingText}</p><div className="loading-line"><i></i></div></main>
       ) : (
         <main className={`main-layout ${tab === "sportsbook" ? "with-slip" : ""}`}>
-          {tab === "sportsbook" && <Sportsbook data={data} summary={summary} teamNames={teamNames} gameId={gameId} setGameId={setGameId} selections={selections} toggleMarket={toggleMarket} />}
-          {tab === "bets" && <TicketsView tickets={settledTickets} results={officialResults} teamNames={teamNames} />}
-          {tab === "leaderboard" && <LeaderboardView community={community} results={officialResults} scenario={persisted.scenario} />}
-          {tab === "tournament" && <TournamentView data={data} scenario={persisted.scenario} teamNames={teamNames} results={officialResults} readOnly={Boolean(community)} onResults={(results) => setPersisted((current) => ({ ...current, results }))} />}
+          {tab === "sportsbook" && <Sportsbook data={data} summary={summary} games={activeGames} teamNames={teamNames} gameId={gameId} setGameId={setGameId} selections={selections} toggleMarket={toggleMarket} />}
+          {tab === "bets" && <TicketsView tickets={settledTickets} results={officialResults} games={activeGames} teamNames={teamNames} />}
+          {tab === "leaderboard" && <LeaderboardView community={community} results={officialResults} games={activeGames} scenario={persisted.scenario} />}
+          {tab === "tournament" && <TournamentView data={data} games={activeGames} scenario={persisted.scenario} teamNames={teamNames} results={officialResults} readOnly={Boolean(community)} onResults={(results) => setPersisted((current) => ({ ...current, results }))} />}
           {tab === "rules" && <RulesView />}
           {tab === "sportsbook" && <BetSlip selections={selections} price={parlayPrice} pricing={pricing} submitting={submitting} mobileOpen={mobileSlipOpen} stake={stake} available={account.available} onStake={setStake} onRemove={(id) => setSelections((current) => current.filter((item) => item.id !== id))} onClear={() => { setSelections([]); setMobileSlipOpen(false); }} onPlace={placeBet} onMobileClose={() => setMobileSlipOpen(false)} />}
         </main>

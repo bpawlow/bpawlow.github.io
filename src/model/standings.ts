@@ -1,5 +1,5 @@
 import { GAMES } from "../types";
-import type { GameId, GameResult, TeamId } from "../types";
+import type { GameDefinition, GameId, GameResult, TeamId } from "../types";
 
 export interface Standing {
   teamId: TeamId;
@@ -11,12 +11,12 @@ export interface Standing {
   rank: number;
 }
 
-export function calculateStandings(results: Record<GameId, GameResult>): Standing[] {
+export function calculateStandings(results: Record<GameId, GameResult>, games: GameDefinition[] = GAMES): Standing[] {
   const table = new Map<TeamId, Omit<Standing, "rank">>();
   for (const teamId of ["Team A", "Team B", "Team C"] as const) {
     table.set(teamId, { teamId, wins: 0, losses: 0, pointsFor: 0, pointsAgainst: 0, differential: 0 });
   }
-  for (const game of GAMES) {
+  for (const game of games.filter((item) => item.countsTowardStandings)) {
     const result = results[game.id];
     if (!result.final || result.team1Score === null || result.team2Score === null) continue;
     const team1 = table.get(game.team1)!;

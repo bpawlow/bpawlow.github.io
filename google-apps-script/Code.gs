@@ -150,6 +150,10 @@ function rows_(name) {
   });
 }
 
+function optionalRows_(name) {
+  return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name) ? rows_(name) : [];
+}
+
 function rowsFromHeader_(name, firstHeader) {
   var values = sheet_(name).getDataRange().getValues();
   var headerRow = values.findIndex(function(row) { return row[0] === firstHeader; });
@@ -197,6 +201,15 @@ function numberOrNull_(value) {
   return value === "" || value === null ? null : Number(value);
 }
 
+function teamIdFromDisplay_(value, config) {
+  var names = {
+    "Team A": String(config.TEAM_A_NAME || "Team A"),
+    "Team B": String(config.TEAM_B_NAME || "Team B"),
+    "Team C": String(config.TEAM_C_NAME || "Team C")
+  };
+  return ["Team A", "Team B", "Team C"].find(function(team) { return team === value || names[team] === value; }) || "";
+}
+
 function getConfig_() {
   var config = {};
   rows_("App Config").forEach(function(row) { config[row.Key] = row.Value; });
@@ -212,9 +225,44 @@ function canonicalGame_(gameId) {
   return games[String(gameId || "")] || null;
 }
 
+function ensureScheduleSchema_() {
+  var sheet = sheet_("Schedule & Results");
+  var required = ["Game #", "Game Type", "Team 1 ID", "Team 2 ID", "Bye ID", "Counts Toward Standings?", "Betting Enabled?"];
+  var values = sheet.getDataRange().getValues();
+  var headers = values[0] || [];
+  required.forEach(function(header) {
+    if (headers.indexOf(header) >= 0) return;
+    sheet.getRange(1, sheet.getLastColumn() + 1).setValue(header);
+    headers.push(header);
+  });
+  values = sheet.getDataRange().getValues();
+  headers = values[0];
+  var columns = index_(headers);
+  var config = getConfig_();
+  for (var row = 1; row < values.length; row++) {
+    if (!values[row][columns["Game ID"]]) continue;
+    var legacy = canonicalGame_(values[row][columns["Game ID"]]);
+    var team1Id = values[row][columns["Team 1 ID"]] || (legacy && legacy.team1) || teamIdFromDisplay_(values[row][columns["Team 1"]], config);
+    var team2Id = values[row][columns["Team 2 ID"]] || (legacy && legacy.team2) || teamIdFromDisplay_(values[row][columns["Team 2"]], config);
+    var byeId = values[row][columns["Bye ID"]] || (legacy && legacy.bye) || teamIdFromDisplay_(values[row][columns.Bye], config);
+    var updates = {};
+    updates["Game #"] = values[row][columns["Game #"]] || row;
+    updates["Game Type"] = values[row][columns["Game Type"]] || "TOURNAMENT";
+    updates["Team 1 ID"] = team1Id;
+    updates["Team 2 ID"] = team2Id;
+    updates["Bye ID"] = byeId;
+    updates["Counts Toward Standings?"] = values[row][columns["Counts Toward Standings?"]] === "" ? true : values[row][columns["Counts Toward Standings?"]];
+    updates["Betting Enabled?"] = values[row][columns["Betting Enabled?"]] === "" ? true : values[row][columns["Betting Enabled?"]];
+    Object.keys(updates).forEach(function(header) {
+      if (values[row][columns[header]] !== updates[header]) sheet.getRange(row + 1, columns[header] + 1).setValue(updates[header]);
+    });
+  }
+}
+
 function syncTeamNames_() {
   var configSheet = sheet_("App Config");
   var config = getConfig_();
+  ensureScheduleSchema_();
   var scheduleRows = rows_("Schedule & Results");
   var firstGame = scheduleRows.find(function(row) { return row["Game ID"] === "game-1"; }) || {};
   var defaults = {
@@ -239,14 +287,52 @@ function syncTeamNames_() {
   if (!values.length) return;
   var columns = index_(values[0]);
   for (var row = 1; row < values.length; row++) {
-    var game = canonicalGame_(values[row][columns["Game ID"]]);
-    if (!game) continue;
-    var nextNames = [names[game.team1], names[game.team2], names[game.bye]];
-    var currentNames = [values[row][columns["Team 1"]], values[row][columns["Team 2"]], values[row][columns.Bye]];
-    if (currentNames.join("\u0000") !== nextNames.join("\u0000")) {
-      scheduleSheet.getRange(row + 1, columns["Team 1"] + 1, 1, 3).setValues([nextNames]);
-    }
+    var team1 = values[row][columns["Team 1 ID"]];
+    var team2 = values[row][columns["Team 2 ID"]];
+    var bye = values[row][columns["Bye ID"]];
+    if (!team1 || !team2) continue;
+    var nextNames = [names[team1], names[team2], bye ? names[bye] : ""];
+    [["Team 1", nextNames[0]], ["Team 2", nextNames[1]], ["Bye", nextNames[2]]].forEach(function(item) {
+      if (values[row][columns[item[0]]] !== item[1]) scheduleSheet.getRange(row + 1, columns[item[0]] + 1).setValue(item[1]);
+    });
   }
+}
+
+function ensureBoxScoreRows_(assignments) {
+  var boxSheet = sheet_("Box Scores");
+  var values = boxSheet.getDataRange().getValues();
+  if (values.length < 1) return;
+  var headers = values[0];
+  var columns = index_(headers);
+  var existing = {};
+  values.slice(1).forEach(function(row) {
+    if (row[columns["Game ID"]] && row[columns.Scenario] && row[columns["Player ID"]]) {
+      existing[[row[columns["Game ID"]], row[columns.Scenario], row[columns["Player ID"]]].join("|")] = true;
+    }
+  });
+  var schedule = rows_("Schedule & Results");
+  var scenarios = ["Brad Out", "Brad Plays"];
+  schedule.forEach(function(game) {
+    scenarios.forEach(function(scenario) {
+      var specific = assignments.filter(function(item) { return item.gameId === game["Game ID"] && item.scenario === scenario; });
+      var roster = specific.length ? specific : assignments.filter(function(item) { return !item.gameId && item.scenario === scenario; });
+      roster.forEach(function(item) {
+        var key = [game["Game ID"], scenario, item.playerId].join("|");
+        if (existing[key]) return;
+        var row = new Array(headers.length).fill("");
+        row[columns["Game ID"]] = game["Game ID"];
+        row[columns.Scenario] = scenario;
+        row[columns["Player ID"]] = item.playerId;
+        row[columns.Player] = item.playerName;
+        row[columns.Team] = item.teamId;
+        row[columns["Played?"]] = false;
+        boxSheet.appendRow(row);
+        var newRow = boxSheet.getLastRow();
+        if (columns.PRA !== undefined) boxSheet.getRange(newRow, columns.PRA + 1).setFormula('=IF(F' + newRow + ',SUM(G' + newRow + ':I' + newRow + '),"")');
+        existing[key] = true;
+      });
+    });
+  });
 }
 
 function getState_() {
@@ -274,9 +360,19 @@ function getState_() {
       });
     });
   });
+  optionalRows_("Game Rosters").forEach(function(row) {
+    var scenario = row["Roster Configuration"] === "ALTERNATE" ? "Brad Plays" : (row.Scenario || "Brad Out");
+    var names = row.Player === "Berler/Jason" ? ["Berler", "Jason"] : [row.Player];
+    names.filter(Boolean).forEach(function(name) {
+      assignments.push({ scenario: scenario, teamId: row.Team || row["Team ID"], gameId: row["Game ID"], playerId: slug_(name), playerName: name, rotationShare: Number(row["Rotation Share"] || 1), notes: row.Notes || "" });
+    });
+  });
+  ensureBoxScoreRows_(assignments);
   var schedule = rows_("Schedule & Results").map(function(row) {
     return {
-      gameId: row["Game ID"], team1: row["Team 1"] || "", team2: row["Team 2"] || "", bye: row.Bye || "", status: row.Status || "UPCOMING",
+      gameId: row["Game ID"], number: Number(row["Game #"] || 0), type: row["Game Type"] || "TOURNAMENT",
+      team1Id: row["Team 1 ID"] || teamIdFromDisplay_(row["Team 1"] || "", config), team2Id: row["Team 2 ID"] || teamIdFromDisplay_(row["Team 2"] || "", config), byeId: row["Bye ID"] || (row.Bye ? teamIdFromDisplay_(row.Bye, config) : null),
+      team1: row["Team 1"] || "", team2: row["Team 2"] || "", bye: row.Bye || "", countsTowardStandings: bool_(row["Counts Toward Standings?"]), bettingEnabled: bool_(row["Betting Enabled?"]), status: row.Status || "UPCOMING",
       team1Score: numberOrNull_(row["Team 1 Score"]), team2Score: numberOrNull_(row["Team 2 Score"]),
       final: bool_(row["Final?"]), bettingLocked: bool_(row["Betting Locked?"]), updatedAt: row["Updated At"] || ""
     };
@@ -327,7 +423,7 @@ function settleBets_() {
   rows_("Schedule & Results").forEach(function(row) {
     var game = canonicalGame_(row["Game ID"]);
     schedule[row["Game ID"]] = {
-      team1: game ? game.team1 : row["Team 1"], team2: game ? game.team2 : row["Team 2"], score1: numberOrNull_(row["Team 1 Score"]),
+      team1: row["Team 1 ID"] || (game ? game.team1 : row["Team 1"]), team2: row["Team 2 ID"] || (game ? game.team2 : row["Team 2"]), score1: numberOrNull_(row["Team 1 Score"]),
       score2: numberOrNull_(row["Team 2 Score"]), final: bool_(row["Final?"])
     };
   });
@@ -417,8 +513,25 @@ function gradeLeg_(row, index, schedule, box, scenario) {
   return "pending";
 }
 
+function validateTicketLegs_(ticket) {
+  var groups = {};
+  ticket.legs.forEach(function(leg) {
+    var group = [leg.gameId, leg.kind, leg.playerId || "", leg.stat || ""].join("|");
+    if (groups[group]) throw new Error("A ticket cannot contain duplicate or opposite selections from the same market");
+    groups[group] = true;
+  });
+  ticket.legs.forEach(function(leg) {
+    if (leg.kind !== "spread" || Number(leg.line) >= 0 || !leg.teamId) return;
+    var impossible = ticket.legs.some(function(other) {
+      return other.gameId === leg.gameId && other.kind === "moneyline" && other.teamId && other.teamId !== leg.teamId;
+    });
+    if (impossible) throw new Error("A favorite spread and the opposing moneyline cannot both be selected");
+  });
+}
+
 function placeBet_(ticket) {
   if (!ticket || !ticket.id || !ticket.participant || !ticket.legs || !ticket.legs.length) throw new Error("Ticket is incomplete");
+  validateTicketLegs_(ticket);
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
@@ -439,7 +552,7 @@ function placeBet_(ticket) {
     if (!(Number(ticket.stake) > 0) || Number(ticket.stake) > available + 0.0001) throw new Error("Stake exceeds shared bankroll");
 
     var locked = {};
-    rows_("Schedule & Results").forEach(function(row) { locked[row["Game ID"]] = bool_(row["Betting Locked?"]); });
+    rows_("Schedule & Results").forEach(function(row) { locked[row["Game ID"]] = bool_(row["Betting Locked?"]) || (row["Betting Enabled?"] !== undefined && row["Betting Enabled?"] !== "" && !bool_(row["Betting Enabled?"])); });
     ticket.legs.forEach(function(leg) { if (locked[leg.gameId]) throw new Error(leg.gameId + " is locked"); });
 
     sheet_("Bets").appendRow([
