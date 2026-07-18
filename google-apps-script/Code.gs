@@ -50,16 +50,16 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu("Bachelor Book")
     .addItem("Delete a bet", "deleteBetPrompt")
     .addItem("Remove a participant", "removeParticipantPrompt")
-    .addItem("Reset all betting bankrolls", "resetAllBankrollsPrompt")
+    .addItem("Reset Beer bankrolls", "resetAllBankrollsPrompt")
     .addToUi();
 }
 
 function resetAllBankrollsPrompt() {
   var ui = SpreadsheetApp.getUi();
-  var confirmation = ui.alert("Reset all betting bankrolls", "This permanently deletes every row in Bets and Bet Legs, while keeping the participant roster. Every participant will return to the configured starting balance of 100 units. Continue?", ui.ButtonSet.YES_NO);
+  var confirmation = ui.alert("Reset Beer bankrolls", "This permanently deletes only Beer Bets and Beer Bet Legs. Basketball Bets, Bet Legs, the basketball leaderboard, and the participant roster are preserved. Beer betting balances return to 100 units. Continue?", ui.ButtonSet.YES_NO);
   if (confirmation !== ui.Button.YES) return;
   var result = resetAllBankrolls_();
-  ui.alert("Bankroll reset complete. " + result.deletedBets + " bets were removed; every participant now has 100 units available.");
+  ui.alert("Beer bankroll reset complete. " + result.deletedBets + " Beer bets were removed. Basketball history was not changed; Beer participants now have 100 units available.");
 }
 
 function resetAllBankrolls_() {
@@ -67,11 +67,11 @@ function resetAllBankrolls_() {
   lock.waitLock(10000);
   try {
     var deletedBets = 0;
-    ["Bet Legs", "Bets"].forEach(function(name) {
+    ["Beer Bet Legs", "Beer Bets"].forEach(function(name) {
       var sheet = sheet_(name);
       var rows = sheet.getLastRow();
       if (rows > 1) {
-        if (name === "Bets") deletedBets = rows - 1;
+        if (name === "Beer Bets") deletedBets = rows - 1;
         sheet.deleteRows(2, rows - 1);
       }
     });
@@ -125,7 +125,7 @@ function removeParticipantByName_(participant) {
 
 function deleteBetPrompt() {
   var ui = SpreadsheetApp.getUi();
-  var response = ui.prompt("Delete a bet", "Paste the exact Bet ID from the Bets tab. This permanently removes the ticket and all of its legs.", ui.ButtonSet.OK_CANCEL);
+  var response = ui.prompt("Delete a bet", "Paste the exact Bet ID from the Bets or Beer Bets tab. This permanently removes the ticket and all of its legs.", ui.ButtonSet.OK_CANCEL);
   if (response.getSelectedButton() !== ui.Button.OK) return;
   var betId = String(response.getResponseText() || "").trim();
   if (!betId) { ui.alert("No Bet ID was entered."); return; }
@@ -140,7 +140,7 @@ function deleteBetById_(betId) {
   lock.waitLock(10000);
   try {
     var deleted = false;
-    [["Bet Legs", "Bet ID"], ["Bets", "Bet ID"]].forEach(function(target) {
+    [["Bet Legs", "Bet ID"], ["Bets", "Bet ID"], ["Beer Bet Legs", "Bet ID"], ["Beer Bets", "Bet ID"]].forEach(function(target) {
       var sheet = sheet_(target[0]);
       if (sheet.getLastRow() < 2) return;
       var values = sheet.getDataRange().getValues();
@@ -253,7 +253,10 @@ function ensureBeerSheets_() {
     "Beer Olympics Config": ["Key", "Value", "Description"],
     "Beer Schedule & Results": ["Event ID", "Event #", "Event Name", "Matchup ID", "Sequence", "Team 1 ID", "Team 1", "Team 2 ID", "Team 2", "Status", "Betting Enabled?", "Betting Locked?", "Counts Toward Standings?", "Winner Team ID", "Team 1 Score/Time", "Team 2 Score/Time", "Final?", "Updated At", "Notes"],
     "Beer Moneylines": ["Matchup ID", "Team ID", "Team Name", "American Odds", "Betting Enabled?", "Notes"],
-    "Beer Die Props": ["Prop ID", "Matchup ID", "Prop Name", "Scope", "Team ID", "Market Type", "Line", "Over American Odds", "Under American Odds", "Yes American Odds", "No American Odds", "Actual Result Value", "Winning Side", "Betting Enabled?", "Betting Locked?", "Final?", "Notes"]
+    "Beer Die Props": ["Prop ID", "Matchup ID", "Prop Name", "Scope", "Team ID", "Market Type", "Line", "Over American Odds", "Under American Odds", "Yes American Odds", "No American Odds", "Actual Result Value", "Winning Side", "Betting Enabled?", "Betting Locked?", "Final?", "Notes"],
+    "Beer Bets": ["Bet ID", "Submitted At", "Bettor", "Stake", "Decimal Odds", "American Odds", "Potential Return", "Scenario", "Status", "Settled Return", "Profit", "Model Version", "Event ID"],
+    "Beer Bet Legs": ["Bet ID", "Leg #", "Game ID", "Competition", "Kind", "Subject", "Player ID", "Prop ID", "Team", "Stat", "Side", "Line", "Label", "Leg Decimal Odds", "Grade"],
+    "Beer Betting Leaderboard": ["Bettor", "Tickets", "Total Staked", "Settled Return", "Profit", "Units Available"]
   };
   Object.keys(definitions).forEach(function(name) {
     var sheet = workbook.getSheetByName(name) || workbook.insertSheet(name);
@@ -357,8 +360,8 @@ function syncBeerTeamNames_() {
   }
 }
 
-function ensureBetLegColumns_() {
-  var sheet = sheet_("Bet Legs");
+function ensureBetLegColumns_(sheetName) {
+  var sheet = sheet_(sheetName || "Bet Legs");
   var values = sheet.getDataRange().getValues();
   var headers = values[0] || [];
   ["Competition", "Prop ID"].forEach(function(header) {
@@ -662,8 +665,23 @@ function getState_() {
       side: row.Side, line: numberOrNull_(row.Line), label: row.Label, odds: Number(row["Leg Decimal Odds"] || 0), grade: row.Grade || ""
     };
   });
+  var beerBets = optionalRows_("Beer Bets").map(function(row) {
+    return {
+      betId: row["Bet ID"], submittedAt: row["Submitted At"], bettor: row.Bettor, stake: Number(row.Stake || 0),
+      decimalOdds: Number(row["Decimal Odds"] || 0), americanOdds: Number(row["American Odds"] || 0),
+      potentialReturn: Number(row["Potential Return"] || 0), scenario: row.Scenario || "Brad Out", status: row.Status || "pending",
+      settledReturn: Number(row["Settled Return"] || 0), profit: Number(row.Profit || 0), modelVersion: Number(row["Model Version"] || 0), eventId: row["Event ID"] || ""
+    };
+  });
+  var beerBetLegs = optionalRows_("Beer Bet Legs").map(function(row) {
+    return {
+      betId: row["Bet ID"], legNumber: Number(row["Leg #"]), gameId: row["Game ID"], competition: "beer-olympics", kind: row.Kind,
+      subject: row.Subject, playerId: row["Player ID"] || "", propId: row["Prop ID"] || "", teamId: row.Team || "", stat: row.Stat || "",
+      side: row.Side, line: numberOrNull_(row.Line), label: row.Label, odds: Number(row["Leg Decimal Odds"] || 0), grade: row.Grade || ""
+    };
+  });
   var participants = rows_("Participants").filter(function(row) { return row.Bettor && bool_(row["Active?"]); }).map(function(row) { return row.Bettor; });
-  return { ok: true, config: config, beerEnabled: bool_(config.BEER_OLYMPICS_ENABLED), beerEvents: Object.keys(beerEventsById).map(function(id) { return beerEventsById[id]; }), beerMatchups: beerMatchups, beerMoneylines: beerMoneylines, beerDieProps: beerDieProps, players: players, assignments: assignments, schedule: schedule, boxScores: boxScores, bets: bets, betLegs: betLegs, participants: participants };
+  return { ok: true, config: config, beerEnabled: bool_(config.BEER_OLYMPICS_ENABLED), beerEvents: Object.keys(beerEventsById).map(function(id) { return beerEventsById[id]; }), beerMatchups: beerMatchups, beerMoneylines: beerMoneylines, beerDieProps: beerDieProps, players: players, assignments: assignments, schedule: schedule, boxScores: boxScores, bets: bets, betLegs: betLegs, beerBets: beerBets, beerBetLegs: beerBetLegs, participants: participants };
 }
 
 function index_(headers) {
@@ -673,9 +691,14 @@ function index_(headers) {
 }
 
 function settleBets_() {
-  ensureBetLegColumns_();
-  var betSheet = sheet_("Bets");
-  var legSheet = sheet_("Bet Legs");
+  settleLedger_("Bets", "Bet Legs");
+  settleLedger_("Beer Bets", "Beer Bet Legs");
+}
+
+function settleLedger_(betSheetName, legSheetName) {
+  ensureBetLegColumns_(legSheetName);
+  var betSheet = sheet_(betSheetName);
+  var legSheet = sheet_(legSheetName);
   if (betSheet.getLastRow() < 2 || legSheet.getLastRow() < 2) return;
   var betValues = betSheet.getDataRange().getValues();
   var legValues = legSheet.getDataRange().getValues();
@@ -752,14 +775,14 @@ function leaderboardSheet_(name, headers) {
   return sheet;
 }
 
-function syncLeaderboards_(config) {
+function syncLedgerLeaderboard_(config, betSheetName, leaderboardName) {
   var bettingHeaders = ["Bettor", "Tickets", "Total Staked", "Settled Return", "Profit", "Units Available"];
-  var bettingSheet = leaderboardSheet_("Betting Leaderboard", bettingHeaders);
+  var bettingSheet = leaderboardSheet_(leaderboardName, bettingHeaders);
   var bettors = {};
   rows_("Participants").forEach(function(row) {
     if (row.Bettor && bool_(row["Active?"])) bettors[String(row.Bettor).trim()] = { tickets: 0, staked: 0, returned: 0, profit: 0 };
   });
-  rows_("Bets").forEach(function(row) {
+  rows_(betSheetName).forEach(function(row) {
     var bettor = String(row.Bettor || "").trim();
     if (!bettor) return;
     if (!bettors[bettor]) bettors[bettor] = { tickets: 0, staked: 0, returned: 0, profit: 0 };
@@ -773,6 +796,11 @@ function syncLeaderboards_(config) {
     return [name, row.tickets, row.staked, row.returned, row.profit, Number(config.STARTING_UNITS || 100) - row.staked + row.returned];
   }).sort(function(left, right) { return right[5] - left[5] || right[4] - left[4] || String(left[0]).localeCompare(String(right[0])); });
   if (bettingRows.length) bettingSheet.getRange(2, 1, bettingRows.length, bettingHeaders.length).setValues(bettingRows);
+}
+
+function syncLeaderboards_(config) {
+  syncLedgerLeaderboard_(config, "Bets", "Betting Leaderboard");
+  syncLedgerLeaderboard_(config, "Beer Bets", "Beer Betting Leaderboard");
 
   var playerHeaders = ["Player", "Games", "Points", "Rebounds", "Assists", "Three Pointers", "PRA"];
   var playerSheet = leaderboardSheet_("Player Leaderboard", playerHeaders);
@@ -873,10 +901,16 @@ function validateTicketLegs_(ticket) {
 function placeBet_(ticket) {
   if (!ticket || !ticket.id || !ticket.participant || !ticket.legs || !ticket.legs.length) throw new Error("Ticket is incomplete");
   validateTicketLegs_(ticket);
+  var hasBeer = ticket.legs.some(function(leg) { return leg.competition === "beer-olympics" || (leg.competition === undefined && String(leg.gameId || "").indexOf("beer-") === 0); });
+  var hasBasketball = ticket.legs.some(function(leg) { return !((leg.competition === "beer-olympics") || (leg.competition === undefined && String(leg.gameId || "").indexOf("beer-") === 0)); });
+  if (hasBeer && hasBasketball) throw new Error("Basketball and Beer bets use separate bankrolls; mixed parlays are disabled");
+  var betSheetName = hasBeer ? "Beer Bets" : "Bets";
+  var legSheetName = hasBeer ? "Beer Bet Legs" : "Bet Legs";
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    ensureBetLegColumns_();
+    ensureBeerSheets_();
+    ensureBetLegColumns_(legSheetName);
     var config = getConfig_();
     if (!bool_(config.BETTING_OPEN)) throw new Error("Central betting is closed");
     if (config.BEER_PARLAY_ENABLED !== undefined && !bool_(config.BEER_PARLAY_ENABLED) && ticket.legs.length > 1 && ticket.legs.some(function(leg) { return leg.competition === "beer-olympics" || (leg.competition === undefined && String(leg.gameId || "").indexOf("beer-") === 0); })) throw new Error("Beer parlays are disabled by the organizer");
@@ -884,7 +918,7 @@ function placeBet_(ticket) {
     if (ticket.scenario !== expectedScenario) throw new Error("Brad scenario changed; refresh the app before betting");
     var allowedParticipants = rows_("Participants").filter(function(row) { return row.Bettor && bool_(row["Active?"]); }).map(function(row) { return String(row.Bettor).trim(); });
     if (allowedParticipants.length && allowedParticipants.indexOf(String(ticket.participant).trim()) < 0) throw new Error("Bettor name is not active in the Participants sheet");
-    var existing = rows_("Bets");
+    var existing = rows_(betSheetName);
     if (existing.some(function(row) { return row["Bet ID"] === ticket.id; })) return { ok: true, duplicate: true };
 
     var startingUnits = Number(config.STARTING_UNITS || 100);
@@ -899,11 +933,11 @@ function placeBet_(ticket) {
     optionalRows_("Beer Schedule & Results").forEach(function(row) { locked[row["Matchup ID"]] = bool_(row["Betting Locked?"]) || !bool_(row["Betting Enabled?"]); });
     ticket.legs.forEach(function(leg) { if (locked[leg.gameId]) throw new Error(leg.gameId + " is locked"); });
 
-    sheet_("Bets").appendRow([
+    sheet_(betSheetName).appendRow([
       ticket.id, new Date(), ticket.participant, Number(ticket.stake), Number(ticket.decimalOdds), Number(ticket.americanOdds),
       Number(ticket.potentialReturn), ticket.scenario, "pending", 0, 0, Number(config.MODEL_VERSION || 1), config.EVENT_ID || ""
     ]);
-    var legSheet = sheet_("Bet Legs");
+    var legSheet = sheet_(legSheetName);
     var legHeaders = legSheet.getDataRange().getValues()[0];
     var legIndex = index_(legHeaders);
     ticket.legs.forEach(function(leg, index) {

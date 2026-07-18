@@ -45,4 +45,10 @@ describe("settlement", () => {
     expect(canStake(25, 25.01)).toBe(false);
     expect(canStake(25, -1)).toBe(false);
   });
+
+  it("replenishes an empty ledger without changing the other competition ledger", () => {
+    const basketball = settleTicket({ ...baseTicket, id: "basketball-ticket", legs: [{ marketId: "ml", gameId: "game-1", kind: "moneyline", subject: "Winner", side: "team1", label: "A", odds: 2 }] }, finalResults());
+    expect(ledger([basketball])).toEqual({ available: 110, totalStaked: 10, returns: 20, profit: 10 });
+    expect(ledger([])).toEqual({ available: 100, totalStaked: 0, returns: 0, profit: 0 });
+  });
 });

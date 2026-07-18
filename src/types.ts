@@ -335,6 +335,8 @@ export interface CommunityState {
   boxScores: SharedBoxScore[];
   bets: SharedBet[];
   betLegs: SharedBetLeg[];
+  beerBets: SharedBet[];
+  beerBetLegs: SharedBetLeg[];
   participants: string[];
   beerEnabled: boolean;
   beerEvents: BeerEvent[];

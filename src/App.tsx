@@ -363,7 +363,8 @@ function TournamentView({ data, games, scenario, teamNames, results, onResults, 
 
 function LeaderboardView({ community, results, games, beerMatchups, beerProps, scenario }: { community: CommunityState | null; results: PersistedState["results"]; games: BasketballData["games"]; beerMatchups: BeerMatchup[]; beerProps: CommunityState["beerDieProps"]; scenario: Scenario }): ReactElement {
   if (!community) return <div className="empty-page"><span>◎</span><h2>Connecting the shared leaderboard</h2><p>The app will retry automatically. Refresh the page if this message remains visible.</p></div>;
-  const centralized = settleTickets(sharedTickets(community), results, games, beerMatchups, beerProps);
+  const centralized = settleTickets(sharedTickets(community, "basketball"), results, games);
+  const beerCentralized = settleTickets(sharedTickets(community, "beer-olympics"), {}, [], beerMatchups, beerProps);
   const names = new Set([...community.participants, ...centralized.map((ticket) => ticket.participant)]);
   const bettors = [...names].map((name) => {
     const tickets = centralized.filter((ticket) => ticket.participant === name);
@@ -379,6 +380,15 @@ function LeaderboardView({ community, results, games, beerMatchups, beerProps, s
         <div className="bettor-head"><span>Rank / Bettor</span><span>Bets</span><span>Staked</span><span>Profit</span><span>Units</span></div>
         {bettors.map((row, index) => <div className="bettor-row" key={row.name}><span><b>{index + 1}</b>{row.name}</span><span>{row.tickets}</span><span>{money(row.totalStaked)}</span><strong className={row.profit > 0 ? "positive" : row.profit < 0 ? "negative" : ""}>{row.profit > 0 ? "+" : ""}{money(row.profit)}</strong><strong>{money(row.available)}</strong></div>)}
         {!bettors.length && <p className="leaderboard-empty">No centralized bets have been placed yet.</p>}
+      </section>
+      <section className="standings-card leaderboard-card">
+        <div className="section-title"><div><span className="eyebrow">Beer Olympics</span><h2>Beer betting leaderboard</h2></div><span>{beerCentralized.length} tickets</span></div>
+        {[...new Set([...community.participants, ...beerCentralized.map((ticket) => ticket.participant)])].map((name, index) => {
+          const tickets = beerCentralized.filter((ticket) => ticket.participant === name);
+          const row = ledger(tickets);
+          return <div className="bettor-row" key={`beer-${name}`}><span><b>{index + 1}</b>{name}</span><span>{tickets.length}</span><span>{money(row.totalStaked)}</span><strong className={row.profit > 0 ? "positive" : row.profit < 0 ? "negative" : ""}>{row.profit > 0 ? "+" : ""}{money(row.profit)}</strong><strong>{money(row.available)}</strong></div>;
+        })}
+        {!beerCentralized.length && <p className="leaderboard-empty">No Beer Olympics bets have been placed yet.</p>}
       </section>
       <section className="standings-card leaderboard-card">
         <div className="section-title"><div><span className="eyebrow">Box scores</span><h2>Player leaderboard</h2></div><span>Active roster</span></div>
@@ -471,19 +481,27 @@ export default function App(): ReactElement {
   const beerMoneylines = useMemo(() => beerMoneylinesFromCommunity(community), [community]);
   const beerProps = useMemo(() => beerDiePropsFromCommunity(community), [community]);
   const beerMarketSelections = useMemo(() => beerMarkets(beerMatchups, beerMoneylines, beerProps), [beerMatchups, beerMoneylines, beerProps]);
-  const accountTickets = useMemo(() => {
-    if (!community) return persisted.tickets;
-    const central = sharedTickets(community).filter((ticket) => ticket.participant === persisted.participant);
+  const isBeerTicket = (ticket: Ticket) => ticket.legs.some((leg) => leg.competition === "beer-olympics" || String(leg.gameId).startsWith("beer-"));
+  const ticketLedger = (competition: "basketball" | "beer-olympics") => {
+    const beer = competition === "beer-olympics";
+    if (!community) return persisted.tickets.filter((ticket) => isBeerTicket(ticket) === beer);
+    const central = sharedTickets(community, competition).filter((ticket) => ticket.participant === persisted.participant);
     const centralIds = new Set(central.map((ticket) => ticket.id));
     const communityLoadedAt = new Date(community.loadedAt).getTime();
     return [...central, ...persisted.tickets.filter((ticket) => {
-      if (centralIds.has(ticket.id)) return false;
+      if (centralIds.has(ticket.id) || isBeerTicket(ticket) !== beer) return false;
       if (!ticket.centralized) return true;
       return new Date(ticket.createdAt).getTime() > communityLoadedAt;
     })];
-  }, [community, persisted.participant, persisted.tickets]);
-  const settledTickets = useMemo(() => settleTickets(accountTickets, officialResults, activeGames, beerMatchups, beerProps), [accountTickets, officialResults, activeGames, beerMatchups, beerProps]);
-  const account = useMemo(() => ledger(settledTickets), [settledTickets]);
+  };
+  const basketballTickets = useMemo(() => ticketLedger("basketball"), [community, persisted.participant, persisted.tickets]);
+  const beerTickets = useMemo(() => ticketLedger("beer-olympics"), [community, persisted.participant, persisted.tickets]);
+  const settledBasketballTickets = useMemo(() => settleTickets(basketballTickets, officialResults, activeGames), [basketballTickets, officialResults, activeGames]);
+  const settledBeerTickets = useMemo(() => settleTickets(beerTickets, {}, [], beerMatchups, beerProps), [beerTickets, beerMatchups, beerProps]);
+  const settledTickets = useMemo(() => [...settledBasketballTickets, ...settledBeerTickets], [settledBasketballTickets, settledBeerTickets]);
+  const basketballAccount = useMemo(() => ledger(settledBasketballTickets), [settledBasketballTickets]);
+  const beerAccount = useMemo(() => ledger(settledBeerTickets), [settledBeerTickets]);
+  const account = tab === "beer" ? beerAccount : basketballAccount;
   const requirement = Math.min(100, account.totalStaked);
 
   useEffect(() => {
@@ -517,8 +535,8 @@ export default function App(): ReactElement {
   }, [community, persisted.scenario]);
 
   useEffect(() => {
-    if (!community?.bets.length) return;
-    const centralIds = new Set(community.bets.map((bet) => bet.betId));
+    if (!community || (!community.bets.length && !community.beerBets.length)) return;
+    const centralIds = new Set([...community.bets, ...community.beerBets].map((bet) => bet.betId));
     if (!persisted.tickets.some((ticket) => centralIds.has(ticket.id) && !ticket.centralized)) return;
     setPersisted((current) => ({
       ...current,
@@ -597,7 +615,11 @@ export default function App(): ReactElement {
       decimalOdds: selections[0].decimalOdds,
       americanOdds: selections[0].americanOdds,
     } : parlayPrice;
-    if (!price || !canStake(account.available, stakeNumber)) return;
+    const beerSelection = selections.some((selection) => selection.competition === "beer-olympics");
+    const basketballSelection = selections.some((selection) => selection.competition !== "beer-olympics");
+    if (beerSelection && basketballSelection) { setToast("Basketball and Beer bets use separate bankrolls; mixed parlays are disabled"); return; }
+    const available = beerSelection ? beerAccount.available : basketballAccount.available;
+    if (!price || !canStake(available, stakeNumber)) return;
     submittingRef.current = true;
     setSubmitting(true);
     const ticket: Ticket = {

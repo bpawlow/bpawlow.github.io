@@ -299,9 +299,26 @@ legs = new_sheet(
     {"A": 38, "B": 10, "C": 28, "D": 18, "E": 16, "F": 28, "G": 18, "H": 24, "I": 13, "J": 13, "K": 12, "L": 11, "M": 45, "N": 20, "O": 12},
 )
 
+beer_bets = new_sheet(
+    wb,
+    "Beer Bets",
+    ["Bet ID", "Submitted At", "Bettor", "Stake", "Decimal Odds", "American Odds", "Potential Return", "Scenario", "Status", "Settled Return", "Profit", "Model Version", "Event ID"],
+    {"A": 38, "B": 24, "C": 22, "D": 12, "E": 15, "F": 15, "G": 18, "H": 15, "I": 13, "J": 18, "K": 13, "L": 15, "M": 28},
+)
+beer_bet_legs = new_sheet(
+    wb,
+    "Beer Bet Legs",
+    ["Bet ID", "Leg #", "Game ID", "Competition", "Kind", "Subject", "Player ID", "Prop ID", "Team", "Stat", "Side", "Line", "Label", "Leg Decimal Odds", "Grade"],
+    {"A": 38, "B": 10, "C": 28, "D": 18, "E": 16, "F": 28, "G": 18, "H": 24, "I": 13, "J": 13, "K": 12, "L": 11, "M": 45, "N": 20, "O": 12},
+)
+
 bet_board = new_sheet(wb, "Betting Leaderboard", ["Bettor", "Tickets", "Total Staked", "Settled Return", "Profit", "Units Available"], {"A": 24, "B": 12, "C": 18, "D": 20, "E": 14, "F": 18})
 bet_board["A2"] = '=IFERROR(QUERY({Bets!C2:C,Bets!D2:D,Bets!J2:J,Bets!K2:K},"select Col1,count(Col1),sum(Col2),sum(Col3),sum(Col4) where Col1 is not null group by Col1 order by sum(Col4) desc label Col1 \'Bettor\',count(Col1) \'Tickets\',sum(Col2) \'Total Staked\',sum(Col3) \'Settled Return\',sum(Col4) \'Profit\'",0),"")'
 bet_board["F2"] = '=ARRAYFORMULA(IF(A2:A="","",100-C2:C+D2:D))'
+
+beer_bet_board = new_sheet(wb, "Beer Betting Leaderboard", ["Bettor", "Tickets", "Total Staked", "Settled Return", "Profit", "Units Available"], {"A": 24, "B": 12, "C": 18, "D": 20, "E": 14, "F": 18})
+beer_bet_board["A2"] = '=IFERROR(QUERY({\'Beer Bets\'!C2:C,\'Beer Bets\'!D2:D,\'Beer Bets\'!J2:J,\'Beer Bets\'!K2:K},"select Col1,count(Col1),sum(Col2),sum(Col3),sum(Col4) where Col1 is not null group by Col1 order by sum(Col4) desc label Col1 \'Bettor\',count(Col1) \'Tickets\',sum(Col2) \'Total Staked\',sum(Col3) \'Settled Return\',sum(Col4) \'Profit\'",0),"")'
+beer_bet_board["F2"] = '=ARRAYFORMULA(IF(A2:A="","",100-C2:C+D2:D))'
 
 player_board = new_sheet(wb, "Player Leaderboard", ["Player", "Games", "Points", "Rebounds", "Assists", "Three Pointers", "PRA"], {"A": 24, "B": 12, "C": 13, "D": 14, "E": 12, "F": 18, "G": 13})
 player_board["A2"] = '=IFERROR(QUERY(\'Box Scores\'!A2:K,"select D,count(D),sum(G),sum(H),sum(I),sum(J),sum(K) where F = TRUE and B = \'"&IF(\'App Config\'!B2,"Brad Plays","Brad Out")&"\' group by D order by sum(K) desc label D \'Player\',count(D) \'Games\',sum(G) \'Points\',sum(H) \'Rebounds\',sum(I) \'Assists\',sum(J) \'Three Pointers\',sum(K) \'PRA\'",0),"")'
@@ -362,7 +379,7 @@ readme.column_dimensions["B"].width = 100
 
 preferred_order = [
     "READ ME FIRST", "App Config", "Quick Player Ratings", "Rating Normalization", "Team Assignments", "Game Rosters", "Team Ratings",
-    "Schedule & Results", "Beer Olympics Config", "Beer Schedule & Results", "Beer Moneylines", "Beer Die Props", "Box Scores", "Participants", "Bets", "Bet Legs", "Betting Leaderboard", "Player Leaderboard",
+    "Schedule & Results", "Beer Olympics Config", "Beer Schedule & Results", "Beer Moneylines", "Beer Die Props", "Box Scores", "Participants", "Bets", "Bet Legs", "Betting Leaderboard", "Beer Bets", "Beer Bet Legs", "Beer Betting Leaderboard", "Player Leaderboard",
 ]
 wb._sheets = [wb[name] for name in preferred_order]
 wb.save(PATH)

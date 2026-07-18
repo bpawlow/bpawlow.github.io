@@ -85,11 +85,11 @@ export function settleTickets(tickets: Ticket[], results: PersistedState["result
   return tickets.map((ticket) => settleTicket(ticket, results, games, beerMatchups, beerProps));
 }
 
-export function ledger(tickets: Ticket[]): { available: number; totalStaked: number; returns: number; profit: number } {
+export function ledger(tickets: Ticket[], startingUnits = 100): { available: number; totalStaked: number; returns: number; profit: number } {
   const totalStaked = tickets.reduce((sum, ticket) => sum + ticket.stake, 0);
   const returns = tickets.reduce((sum, ticket) => sum + ticket.settledReturn, 0);
-  const available = 100 - totalStaked + returns;
-  return { available, totalStaked, returns, profit: available - 100 };
+  const available = startingUnits - totalStaked + returns;
+  return { available, totalStaked, returns, profit: available - startingUnits };
 }
 
 export function canStake(available: number, stake: number): boolean {

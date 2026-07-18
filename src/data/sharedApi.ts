@@ -117,7 +117,7 @@ export async function loadCommunityState(apiUrl: string): Promise<CommunityState
   return {
     ...payload,
     players: normalizePlayers(payload.players ?? []), assignments: payload.assignments ?? [], schedule: payload.schedule ?? [],
-    boxScores: payload.boxScores ?? [], bets: payload.bets ?? [], betLegs: payload.betLegs ?? [], participants: payload.participants ?? [],
+    boxScores: payload.boxScores ?? [], bets: payload.bets ?? [], betLegs: payload.betLegs ?? [], beerBets: payload.beerBets ?? [], beerBetLegs: payload.beerBetLegs ?? [], participants: payload.participants ?? [],
     beerEnabled: payload.beerEnabled === true || String(payload.beerEnabled ?? payload.config?.BEER_OLYMPICS_ENABLED).toUpperCase() === "TRUE",
     beerEvents: payload.beerEvents ?? [], beerMatchups: payload.beerMatchups ?? [], beerMoneylines: payload.beerMoneylines ?? [], beerDieProps: payload.beerDieProps ?? [],
     loadedAt: new Date().toISOString(),
@@ -169,10 +169,12 @@ export function resultsFromCommunity(community: CommunityState | null): Persiste
   return results;
 }
 
-export function sharedTickets(community: CommunityState): Ticket[] {
+export function sharedTickets(community: CommunityState, competition: "basketball" | "beer-olympics" = "basketball"): Ticket[] {
+  const bets = competition === "beer-olympics" ? community.beerBets : community.bets;
+  const betLegs = competition === "beer-olympics" ? community.beerBetLegs : community.betLegs;
   const legsByBet = new Map<string, SharedBetLeg[]>();
-  for (const leg of community.betLegs) legsByBet.set(leg.betId, [...(legsByBet.get(leg.betId) ?? []), leg]);
-  return community.bets.map((bet: SharedBet): Ticket => ({
+  for (const leg of betLegs) legsByBet.set(leg.betId, [...(legsByBet.get(leg.betId) ?? []), leg]);
+  return bets.map((bet: SharedBet): Ticket => ({
     id: bet.betId,
     createdAt: bet.submittedAt,
     participant: bet.bettor,

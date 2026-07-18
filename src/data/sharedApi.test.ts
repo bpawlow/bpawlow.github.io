@@ -13,7 +13,7 @@ const community: CommunityState = {
   boxScores: [{ gameId: "game-1", scenario: "Brad Out", playerId: "alex", playerName: "Alex", teamId: "Team A", played: true, points: 8, rebounds: 4, assists: 2, threes: 2 }],
   bets: [{ betId: "b1", submittedAt: "2026-01-01", bettor: "Ben", stake: 10, decimalOdds: 2, americanOdds: 100, potentialReturn: 20, scenario: "Brad Out", status: "pending", settledReturn: 0, profit: 0, modelVersion: 2, eventId: "event" }],
   betLegs: [{ betId: "b1", legNumber: 1, gameId: "game-1", kind: "moneyline", subject: "Winner", side: "team1", label: "Team A", odds: 2 }],
-  beerEnabled: false, beerEvents: [], beerMatchups: [], beerMoneylines: [], beerDieProps: [],
+  beerEnabled: false, beerEvents: [], beerMatchups: [], beerMoneylines: [], beerDieProps: [], beerBets: [], beerBetLegs: [],
 };
 
 describe("shared Sheet state", () => {
@@ -38,6 +38,14 @@ describe("shared Sheet state", () => {
     expect(tickets[0].participant).toBe("Ben");
     expect(tickets[0].legs[0].gameId).toBe("game-1");
     expect(tickets[0].centralized).toBe(true);
+  });
+
+  it("keeps the basketball and Beer ledgers isolated", () => {
+    const beerBet = { ...community.bets[0], betId: "beer-b1" };
+    const beerLeg = { ...community.betLegs[0], betId: "beer-b1", gameId: "beer-die-matchup-1", competition: "beer-olympics" as const };
+    const mixed = { ...community, beerBets: [beerBet], beerBetLegs: [beerLeg] };
+    expect(sharedTickets(mixed, "basketball").map((ticket) => ticket.id)).toEqual(["b1"]);
+    expect(sharedTickets(mixed, "beer-olympics").map((ticket) => ticket.id)).toEqual(["beer-b1"]);
   });
 
   it("maps added schedule rows and optional byes into game definitions", () => {

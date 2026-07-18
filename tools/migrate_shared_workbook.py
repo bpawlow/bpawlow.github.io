@@ -156,12 +156,23 @@ def migrate(path: Path) -> None:
 
     ensure_sheet(workbook, "Beer Die Props", ["Prop ID", "Matchup ID", "Prop Name", "Scope", "Team ID", "Market Type", "Line", "Over American Odds", "Under American Odds", "Yes American Odds", "No American Odds", "Actual Result Value", "Winning Side", "Betting Enabled?", "Betting Locked?", "Final?", "Notes"])
 
+    ensure_sheet(workbook, "Beer Bets", ["Bet ID", "Submitted At", "Bettor", "Stake", "Decimal Odds", "American Odds", "Potential Return", "Scenario", "Status", "Settled Return", "Profit", "Model Version", "Event ID"])
+    ensure_sheet(workbook, "Beer Bet Legs", ["Bet ID", "Leg #", "Game ID", "Competition", "Kind", "Subject", "Player ID", "Prop ID", "Team", "Stat", "Side", "Line", "Label", "Leg Decimal Odds", "Grade"])
+    ensure_sheet(workbook, "Beer Betting Leaderboard", ["Bettor", "Tickets", "Total Staked", "Settled Return", "Profit", "Units Available"])
+
     legs = workbook["Bet Legs"]
     leg_headers = [legs.cell(1, column).value for column in range(1, legs.max_column + 1)]
     for header in ("Competition", "Prop ID"):
         if header not in leg_headers:
             legs.cell(1, legs.max_column + 1).value = header
             leg_headers.append(header)
+
+    beer_legs = workbook["Beer Bet Legs"]
+    beer_leg_headers = [beer_legs.cell(1, column).value for column in range(1, beer_legs.max_column + 1)]
+    for header in ("Competition", "Prop ID"):
+        if header not in beer_leg_headers:
+            beer_legs.cell(1, beer_legs.max_column + 1).value = header
+            beer_leg_headers.append(header)
 
     if "Game Rosters" not in workbook.sheetnames:
         workbook.create_sheet("Game Rosters")

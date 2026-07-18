@@ -188,7 +188,9 @@ The spreadsheet contains equivalent `Betting Leaderboard` and `Player Leaderboar
 
 ### Replenish every participant to 100 units
 
-For a new Beer Olympics betting slate, use the Google Sheet menu `Bachelor Book → Reset all betting bankrolls`. Confirm the warning. This permanently deletes all rows in `Bets` and `Bet Legs`, preserves the `Participants` roster, and restores every participant to the configured 100-unit starting balance. Use this only between betting slates; it removes the historical betting leaderboard and ticket history.
+For a new Beer Olympics betting slate, use the Google Sheet menu `Bachelor Book → Reset Beer bankrolls`. Confirm the warning. This permanently deletes only `Beer Bets` and `Beer Bet Legs`, while preserving basketball `Bets`, `Bet Legs`, the basketball betting leaderboard, box scores, standings, and the `Participants` roster. Beer betting balances return to 100 units. Use this only between Beer betting slates; it does not remove basketball history.
+
+Basketball and Beer Olympics use separate 100-unit wallets. A ticket cannot mix basketball and Beer legs. The app displays the wallet for the active Markets tab, and each leaderboard is calculated from its own ledger.
 - If a result is corrected, the settlement pass recomputes ticket states from the official records.
 
 ## Removing a test participant
