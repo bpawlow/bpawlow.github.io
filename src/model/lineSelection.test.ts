@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { balancedHalfLine } from "./lineSelection";
+import { balancedHalfLine, offsetLine } from "./lineSelection";
 
 describe("balanced prop lines", () => {
   it("chooses the available half-line closest to a 50/50 outcome", () => {
@@ -12,5 +12,10 @@ describe("balanced prop lines", () => {
 
   it("keeps zero-production markets on a valid half-point line", () => {
     expect(balancedHalfLine(new Uint8Array([0, 0, 0]))).toBe(0.5);
+  });
+
+  it("applies a rounded whole-number line offset", () => {
+    expect(offsetLine(1.5, 1.8)).toBe(3.5);
+    expect(offsetLine(2.5, -1.2)).toBe(1.5);
   });
 });
