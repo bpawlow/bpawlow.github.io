@@ -225,7 +225,15 @@ function ensureModelConfig_() {
     "ASSIST_LINE_QUANTILE": true,
     "THREES_LINE_QUANTILE": true,
     "POINTS_LINE_QUANTILE": true,
-    "COMBO_LINE_QUANTILE": true
+    "COMBO_LINE_QUANTILE": true,
+    "POINTS_LINE_OFFSET": true,
+    "REBOUNDS_LINE_OFFSET": true,
+    "ASSISTS_LINE_OFFSET": true,
+    "THREES_LINE_OFFSET": true,
+    "PR_LINE_OFFSET": true,
+    "PA_LINE_OFFSET": true,
+    "RA_LINE_OFFSET": true,
+    "PRA_LINE_OFFSET": true
   };
   var sheetValues = configSheet.getDataRange().getValues();
   var keyColumn = sheetValues[0].indexOf("Key");

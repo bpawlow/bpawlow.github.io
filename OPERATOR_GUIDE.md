@@ -133,6 +133,8 @@ For a last-minute change to an upcoming game, use `Game Rosters` instead of rewr
 
 After changing rosters or model settings, increment `MODEL_VERSION`, refresh the website, and do not change accepted betting assumptions without closing betting and reviewing existing tickets. Player lines are always selected near the simulated 50/50 threshold; there are no editable quantile settings. The most useful advanced controls are `ASSIST_ROLE_EXPONENT`, `ASSIST_ROLE_WEIGHT`, `REBOUND_ROLE_EXPONENT`, and `REBOUND_ROLE_WEIGHT`, which adjust how strongly elite playmakers and rebounders receive individual credit. The points and three-point sensitivity controls are calibration-only; leave them at their defaults unless you are deliberately recalibrating the model.
 
+The temporary `*_LINE_OFFSET` settings are deprecated and should not be added back to `App Config`. The reverted Apps Script removes any remaining offset rows during its next state sync.
+
 ## Leaderboards
 
 The website’s Leaderboard screen has two tables:
