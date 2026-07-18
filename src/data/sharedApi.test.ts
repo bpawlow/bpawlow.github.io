@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CommunityState } from "../types";
-import { gamesFromSchedule, modelConfigFromCommunity, resultsFromCommunity, sharedTickets } from "./sharedApi";
+import { beerMatchupsFromCommunity, beerMoneylinesFromCommunity, gamesFromSchedule, modelConfigFromCommunity, resultsFromCommunity, sharedTickets } from "./sharedApi";
 
 const community: CommunityState = {
   config: { BRAD_PLAYS: false }, loadedAt: "2026-01-01", participants: ["Ben"],
@@ -63,5 +63,16 @@ describe("shared Sheet state", () => {
       reboundRoleExponent: 1.9,
       reboundRoleWeight: 1.35,
     });
+  });
+
+  it("uses configured display names for Beer matchup headers and odds labels", () => {
+    const configured = {
+      ...community,
+      config: { ...community.config, TEAM_A_NAME: "The Sharks", TEAM_B_NAME: "The Beers", TEAM_C_NAME: "The Boats" },
+      beerMatchups: [{ matchupId: "beer-kayak-matchup-1", eventId: "beer-kayak", eventNumber: 1, sequence: 1, team1Id: "Team A" as const, team2Id: "Team B" as const, team1: "Team A", team2: "Team B", status: "UPCOMING" as const, bettingEnabled: true, bettingLocked: false, countsTowardStandings: true, winnerTeamId: null, team1Score: "", team2Score: "", final: false, updatedAt: "", notes: "" }],
+      beerMoneylines: [{ matchupId: "beer-kayak-matchup-1", teamId: "Team A" as const, teamName: "Team A", americanOdds: 100, bettingEnabled: true, notes: "" }],
+    };
+    expect(beerMatchupsFromCommunity(configured)[0]).toMatchObject({ team1: "The Sharks", team2: "The Beers" });
+    expect(beerMoneylinesFromCommunity(configured)[0]).toMatchObject({ teamName: "The Sharks" });
   });
 });

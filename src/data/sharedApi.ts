@@ -86,16 +86,32 @@ export function beerEventsFromCommunity(community: CommunityState | null): BeerE
 }
 
 export function beerMatchupsFromCommunity(community: CommunityState | null): BeerMatchup[] {
+  const config = community?.config ?? {};
+  const displayNames: Record<TeamId, string> = {
+    "Team A": String(config.TEAM_A_NAME || "Team A"),
+    "Team B": String(config.TEAM_B_NAME || "Team B"),
+    "Team C": String(config.TEAM_C_NAME || "Team C"),
+  };
   return (community?.beerMatchups ?? []).map((row, index) => ({
     ...row,
     eventNumber: Number(row.eventNumber || 0), sequence: Number(row.sequence || index + 1),
     team1Id: teamId(row.team1Id) ?? "Team A", team2Id: teamId(row.team2Id) ?? "Team B",
+    team1: displayNames[teamId(row.team1Id) ?? "Team A"], team2: displayNames[teamId(row.team2Id) ?? "Team B"],
     winnerTeamId: teamId(row.winnerTeamId), team1Score: String(row.team1Score ?? ""), team2Score: String(row.team2Score ?? ""),
   }));
 }
 
 export function beerMoneylinesFromCommunity(community: CommunityState | null): BeerMoneyline[] {
-  return (community?.beerMoneylines ?? []).map((row) => ({ ...row, teamId: teamId(row.teamId) ?? "Team A", americanOdds: numberOrNull(row.americanOdds) }));
+  const config = community?.config ?? {};
+  const displayNames: Record<TeamId, string> = {
+    "Team A": String(config.TEAM_A_NAME || "Team A"),
+    "Team B": String(config.TEAM_B_NAME || "Team B"),
+    "Team C": String(config.TEAM_C_NAME || "Team C"),
+  };
+  return (community?.beerMoneylines ?? []).map((row) => {
+    const id = teamId(row.teamId) ?? "Team A";
+    return { ...row, teamId: id, teamName: displayNames[id], americanOdds: numberOrNull(row.americanOdds) };
+  });
 }
 
 export function beerDiePropsFromCommunity(community: CommunityState | null): BeerDieProp[] {
