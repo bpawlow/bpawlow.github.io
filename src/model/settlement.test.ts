@@ -26,6 +26,13 @@ describe("settlement", () => {
     expect(gradeLeg({ marketId: "pra", gameId: "game-1", kind: "player-prop", subject: "Alex", playerId: "alex", stat: "pra", side: "over", line: 15.5, label: "Alex PRA", odds: 2 }, results)).toBe("win");
   });
 
+  it("grades Beer moneylines and manually finalized Beer Die props", () => {
+    const beerMatchups = [{ matchupId: "beer-die-matchup-1", eventId: "beer-die", eventNumber: 3, sequence: 1, team1Id: "Team A" as const, team2Id: "Team B" as const, team1: "A", team2: "B", status: "FINAL" as const, bettingEnabled: true, bettingLocked: true, countsTowardStandings: true, winnerTeamId: "Team B" as const, team1Score: "", team2Score: "", final: true, updatedAt: "", notes: "" }];
+    const beerProps = [{ propId: "corner-cup", matchupId: "beer-die-matchup-1", name: "Corner cup", scope: "team" as const, teamId: "Team A" as const, marketType: "yes-no" as const, line: null, overAmericanOdds: null, underAmericanOdds: null, yesAmericanOdds: 200, noAmericanOdds: -250, actualValue: null, winningSide: "no" as const, bettingEnabled: true, bettingLocked: true, final: true, notes: "" }];
+    expect(gradeLeg({ marketId: "beer-ml", gameId: "beer-die-matchup-1", competition: "beer-olympics", kind: "moneyline", subject: "B", teamId: "Team B", side: "team2", label: "B", odds: 2 }, {}, [], beerMatchups, beerProps)).toBe("win");
+    expect(gradeLeg({ marketId: "beer-prop", gameId: "beer-die-matchup-1", competition: "beer-olympics", kind: "beer-prop", subject: "Corner cup", propId: "corner-cup", teamId: "Team A", side: "no", label: "No", odds: 1.4 }, {}, [], beerMatchups, beerProps)).toBe("win");
+  });
+
   it("settles a winning ticket and rebuilds the bankroll", () => {
     const ticket = settleTicket({ ...baseTicket, legs: [{ marketId: "ml", gameId: "game-1", kind: "moneyline", subject: "Winner", side: "team1", label: "A", odds: 2 }] }, finalResults());
     expect(ticket.status).toBe("won");

@@ -213,7 +213,98 @@ function teamIdFromDisplay_(value, config) {
 function getConfig_() {
   var config = {};
   rows_("App Config").forEach(function(row) { config[row.Key] = row.Value; });
+  optionalRows_("Beer Olympics Config").forEach(function(row) { if (row.Key) config[row.Key] = row.Value; });
   return config;
+}
+
+function ensureBeerSheets_() {
+  var workbook = SpreadsheetApp.getActiveSpreadsheet();
+  var definitions = {
+    "Beer Olympics Config": ["Key", "Value", "Description"],
+    "Beer Schedule & Results": ["Event ID", "Event #", "Event Name", "Matchup ID", "Sequence", "Team 1 ID", "Team 1", "Team 2 ID", "Team 2", "Status", "Betting Enabled?", "Betting Locked?", "Counts Toward Standings?", "Winner Team ID", "Team 1 Score/Time", "Team 2 Score/Time", "Final?", "Updated At", "Notes"],
+    "Beer Moneylines": ["Matchup ID", "Team ID", "Team Name", "American Odds", "Betting Enabled?", "Notes"],
+    "Beer Die Props": ["Prop ID", "Matchup ID", "Prop Name", "Scope", "Team ID", "Market Type", "Line", "Over American Odds", "Under American Odds", "Yes American Odds", "No American Odds", "Actual Result Value", "Winning Side", "Betting Enabled?", "Betting Locked?", "Final?", "Notes"]
+  };
+  Object.keys(definitions).forEach(function(name) {
+    var sheet = workbook.getSheetByName(name) || workbook.insertSheet(name);
+    var headers = definitions[name];
+    var values = sheet.getLastRow() ? sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), headers.length)).getValues()[0] : [];
+    if (!values.length || values[0] === "") sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    else headers.forEach(function(header, index) { if (values.indexOf(header) < 0) sheet.getRange(1, sheet.getLastColumn() + 1).setValue(header); });
+  });
+  var config = getConfig_();
+  var configSheet = workbook.getSheetByName("Beer Olympics Config");
+  var existing = {};
+  optionalRows_("Beer Olympics Config").forEach(function(row) { existing[row.Key] = true; });
+  [["BEER_OLYMPICS_ENABLED", false, "Set TRUE to show Beer Olympics in the app."], ["BEER_MODEL_VERSION", 1, "Increment after changing the Beer schedule or manual market assumptions."], ["BEER_STANDINGS_ENABLED", true, "Set FALSE to hide Beer wins/losses standings."], ["BEER_PARLAY_ENABLED", true, "Set FALSE to prevent Beer markets from entering parlays."]].forEach(function(item) {
+    if (!existing[item[0]]) configSheet.appendRow(item);
+  });
+  if (!optionalRows_("Beer Schedule & Results").length) seedBeerSchedule_();
+  if (!optionalRows_("Beer Moneylines").length) seedBeerMoneylines_();
+}
+
+function seedBeerSchedule_() {
+  var sheet = sheet_("Beer Schedule & Results");
+  var events = [["beer-kayak", 1, "Kayak Race / Battle Royale"], ["beer-chug-cornhole", 2, "Beer Chug + Cornhole"], ["beer-die", 3, "Beer Die"], ["beer-spikeball", 4, "Spikeball"], ["beer-football", 5, "Beer Football"]];
+  var pairs = [["Team A", "Team B"], ["Team B", "Team C"], ["Team C", "Team A"]];
+  var rows = [];
+  var sequence = 1;
+  events.forEach(function(event) {
+    pairs.forEach(function(pair) {
+      rows.push([event[0], event[1], event[2], event[0] + "-matchup-" + (sequence - ((event[1] - 1) * 3)), sequence, pair[0], "", pair[1], "", "UPCOMING", true, false, true, "", "", "", false, "", ""]);
+      sequence += 1;
+    });
+  });
+  if (rows.length) sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+}
+
+function seedBeerMoneylines_() {
+  var sheet = sheet_("Beer Moneylines");
+  var schedule = optionalRows_("Beer Schedule & Results");
+  var rows = [];
+  schedule.forEach(function(matchup) {
+    [matchup["Team 1 ID"], matchup["Team 2 ID"]].forEach(function(teamId) {
+      rows.push([matchup["Matchup ID"], teamId, "", "", true, "Enter manual American odds."]);
+    });
+  });
+  if (rows.length) sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+}
+
+function syncBeerTeamNames_() {
+  var config = getConfig_();
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Beer Schedule & Results");
+  if (!sheet || sheet.getLastRow() < 2) return;
+  var values = sheet.getDataRange().getValues();
+  var headers = index_(values[0]);
+  for (var row = 1; row < values.length; row++) {
+    var team1 = values[row][headers["Team 1 ID"]];
+    var team2 = values[row][headers["Team 2 ID"]];
+    if (headers["Team 1"] !== undefined) values[row][headers["Team 1"]] = team1 ? String(config[team1 + "_NAME"] || team1) : "";
+    if (headers["Team 2"] !== undefined) values[row][headers["Team 2"]] = team2 ? String(config[team2 + "_NAME"] || team2) : "";
+  }
+  sheet.getRange(2, 1, values.length - 1, values[0].length).setValues(values.slice(1));
+  var moneylineSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Beer Moneylines");
+  if (moneylineSheet && moneylineSheet.getLastRow() >= 2) {
+    var moneylineValues = moneylineSheet.getDataRange().getValues();
+    var moneylineHeaders = index_(moneylineValues[0]);
+    for (var moneylineRow = 1; moneylineRow < moneylineValues.length; moneylineRow++) {
+      var moneylineTeam = moneylineValues[moneylineRow][moneylineHeaders["Team ID"]];
+      if (moneylineHeaders["Team Name"] !== undefined) moneylineValues[moneylineRow][moneylineHeaders["Team Name"]] = moneylineTeam ? String(config[moneylineTeam + "_NAME"] || moneylineTeam) : "";
+    }
+    moneylineSheet.getRange(2, 1, moneylineValues.length - 1, moneylineValues[0].length).setValues(moneylineValues.slice(1));
+  }
+}
+
+function ensureBetLegColumns_() {
+  var sheet = sheet_("Bet Legs");
+  var values = sheet.getDataRange().getValues();
+  var headers = values[0] || [];
+  ["Competition", "Prop ID"].forEach(function(header) {
+    if (headers.indexOf(header) < 0) {
+      sheet.getRange(1, sheet.getLastColumn() + 1).setValue(header);
+      headers.push(header);
+    }
+  });
 }
 
 function ensureModelConfig_() {
@@ -419,8 +510,10 @@ function ensureBoxScoreRows_(assignments) {
 }
 
 function getState_() {
+  ensureBeerSheets_();
   ensureModelConfig_();
   syncTeamNames_();
+  syncBeerTeamNames_();
   settleBets_();
   var config = getConfig_();
   var players = rowsFromHeader_("Quick Player Ratings", "Player").filter(function(row) { return row.Player; }).map(function(row) {
@@ -469,6 +562,28 @@ function getState_() {
       assists: Number(row.Assists || 0), threes: Number(row["Three Pointers"] || 0)
     };
   });
+  var beerScheduleRows = optionalRows_("Beer Schedule & Results");
+  var beerEventsById = {};
+  var beerMatchups = beerScheduleRows.map(function(row) {
+    var eventId = String(row["Event ID"] || "");
+    if (eventId && !beerEventsById[eventId]) beerEventsById[eventId] = { eventId: eventId, number: Number(row["Event #"] || 0), name: String(row["Event Name"] || eventId) };
+    return {
+      matchupId: row["Matchup ID"], eventId: eventId, eventNumber: Number(row["Event #"] || 0), sequence: Number(row.Sequence || 0),
+      team1Id: row["Team 1 ID"] || "Team A", team2Id: row["Team 2 ID"] || "Team B", team1: row["Team 1"] || row["Team 1 ID"] || "Team A", team2: row["Team 2"] || row["Team 2 ID"] || "Team B",
+      status: row.Status || "UPCOMING", bettingEnabled: bool_(row["Betting Enabled?"]), bettingLocked: bool_(row["Betting Locked?"]), countsTowardStandings: bool_(row["Counts Toward Standings?"]),
+      winnerTeamId: row["Winner Team ID"] || null, team1Score: String(row["Team 1 Score/Time"] || ""), team2Score: String(row["Team 2 Score/Time"] || ""), final: bool_(row["Final?"]), updatedAt: row["Updated At"] || "", notes: row.Notes || ""
+    };
+  });
+  var beerMoneylines = optionalRows_("Beer Moneylines").map(function(row) {
+    return { matchupId: row["Matchup ID"], teamId: row["Team ID"] || "Team A", teamName: row["Team Name"] || row["Team ID"] || "", americanOdds: numberOrNull_(row["American Odds"]), bettingEnabled: bool_(row["Betting Enabled?"]), notes: row.Notes || "" };
+  });
+  var beerDieProps = optionalRows_("Beer Die Props").map(function(row) {
+    return {
+      propId: row["Prop ID"], matchupId: row["Matchup ID"], name: row["Prop Name"] || "", scope: row.Scope === "matchup" ? "matchup" : "team", teamId: row["Team ID"] || null, marketType: row["Market Type"] === "over-under" ? "over-under" : "yes-no", line: numberOrNull_(row.Line),
+      overAmericanOdds: numberOrNull_(row["Over American Odds"]), underAmericanOdds: numberOrNull_(row["Under American Odds"]), yesAmericanOdds: numberOrNull_(row["Yes American Odds"]), noAmericanOdds: numberOrNull_(row["No American Odds"]), actualValue: numberOrNull_(row["Actual Result Value"]), winningSide: row["Winning Side"] || null,
+      bettingEnabled: bool_(row["Betting Enabled?"]), bettingLocked: bool_(row["Betting Locked?"]), final: bool_(row["Final?"]), notes: row.Notes || ""
+    };
+  });
   var bets = rows_("Bets").map(function(row) {
     return {
       betId: row["Bet ID"], submittedAt: row["Submitted At"], bettor: row.Bettor, stake: Number(row.Stake || 0),
@@ -480,13 +595,13 @@ function getState_() {
   });
   var betLegs = rows_("Bet Legs").map(function(row) {
     return {
-      betId: row["Bet ID"], legNumber: Number(row["Leg #"]), gameId: row["Game ID"], kind: row.Kind,
-      subject: row.Subject, playerId: row["Player ID"] || "", teamId: row.Team || "", stat: row.Stat || "",
+      betId: row["Bet ID"], legNumber: Number(row["Leg #"]), gameId: row["Game ID"], competition: row.Competition || (String(row["Game ID"] || "").indexOf("beer-") === 0 ? "beer-olympics" : "basketball"), kind: row.Kind,
+      subject: row.Subject, playerId: row["Player ID"] || "", propId: row["Prop ID"] || "", teamId: row.Team || "", stat: row.Stat || "",
       side: row.Side, line: numberOrNull_(row.Line), label: row.Label, odds: Number(row["Leg Decimal Odds"] || 0), grade: row.Grade || ""
     };
   });
   var participants = rows_("Participants").filter(function(row) { return row.Bettor && bool_(row["Active?"]); }).map(function(row) { return row.Bettor; });
-  return { ok: true, config: config, players: players, assignments: assignments, schedule: schedule, boxScores: boxScores, bets: bets, betLegs: betLegs, participants: participants };
+  return { ok: true, config: config, beerEnabled: bool_(config.BEER_OLYMPICS_ENABLED), beerEvents: Object.keys(beerEventsById).map(function(id) { return beerEventsById[id]; }), beerMatchups: beerMatchups, beerMoneylines: beerMoneylines, beerDieProps: beerDieProps, players: players, assignments: assignments, schedule: schedule, boxScores: boxScores, bets: bets, betLegs: betLegs, participants: participants };
 }
 
 function index_(headers) {
@@ -496,6 +611,7 @@ function index_(headers) {
 }
 
 function settleBets_() {
+  ensureBetLegColumns_();
   var betSheet = sheet_("Bets");
   var legSheet = sheet_("Bet Legs");
   if (betSheet.getLastRow() < 2 || legSheet.getLastRow() < 2) return;
@@ -511,6 +627,14 @@ function settleBets_() {
       team1: row["Team 1 ID"] || (game ? game.team1 : row["Team 1"]), team2: row["Team 2 ID"] || (game ? game.team2 : row["Team 2"]), score1: numberOrNull_(row["Team 1 Score"]),
       score2: numberOrNull_(row["Team 2 Score"]), final: bool_(row["Final?"])
     };
+  });
+  var beerSchedule = {};
+  optionalRows_("Beer Schedule & Results").forEach(function(row) {
+    beerSchedule[row["Matchup ID"]] = { team1: row["Team 1 ID"], team2: row["Team 2 ID"], winner: row["Winner Team ID"] || "", final: bool_(row["Final?"]) };
+  });
+  var beerProps = {};
+  optionalRows_("Beer Die Props").forEach(function(row) {
+    beerProps[row["Prop ID"]] = { marketType: row["Market Type"], line: numberOrNull_(row.Line), actualValue: numberOrNull_(row["Actual Result Value"]), winningSide: row["Winning Side"] || "", final: bool_(row["Final?"]) };
   });
   var box = {};
   rows_("Box Scores").forEach(function(row) {
@@ -531,7 +655,7 @@ function settleBets_() {
     var betId = betValues[betRow][betIndex["Bet ID"]];
     var scenario = betValues[betRow][betIndex.Scenario];
     var grades = (legsByBet[betId] || []).map(function(entry) {
-      var grade = gradeLeg_(entry.values, legIndex, schedule, box, scenario);
+      var grade = gradeLeg_(entry.values, legIndex, schedule, box, scenario, beerSchedule, beerProps);
       if (entry.values[legIndex.Grade] !== grade) changed = true;
       entry.values[legIndex.Grade] = grade;
       return grade;
@@ -616,7 +740,24 @@ function compare_(value, line, side) {
   return value < line ? "win" : "loss";
 }
 
-function gradeLeg_(row, index, schedule, box, scenario) {
+function gradeLeg_(row, index, schedule, box, scenario, beerSchedule, beerProps) {
+  var competition = index.Competition !== undefined ? row[index.Competition] : (String(row[index["Game ID"]] || "").indexOf("beer-") === 0 ? "beer-olympics" : "basketball");
+  if (competition === "beer-olympics") {
+    var matchup = beerSchedule[row[index["Game ID"]]];
+    if (!matchup) return "pending";
+    if (row[index.Kind] === "moneyline") {
+      if (!matchup.final || !matchup.winner) return "pending";
+      return matchup.winner === row[index.Team] ? "win" : "loss";
+    }
+    if (row[index.Kind] === "beer-prop") {
+      var prop = beerProps[row[index["Prop ID"]]];
+      if (!prop || !prop.final) return "pending";
+      if (prop.marketType === "yes-no") return prop.winningSide === row[index.Side] ? "win" : "loss";
+      if (prop.actualValue === null || prop.line === null) return "pending";
+      return compare_(prop.actualValue, prop.line, row[index.Side]);
+    }
+    return "pending";
+  }
   var game = schedule[row[index["Game ID"]]];
   if (!game || !game.final || game.score1 === null || game.score2 === null) return "pending";
   var kind = row[index.Kind];
@@ -654,7 +795,7 @@ function gradeLeg_(row, index, schedule, box, scenario) {
 function validateTicketLegs_(ticket) {
   var groups = {};
   ticket.legs.forEach(function(leg) {
-    var group = [leg.gameId, leg.kind, leg.playerId || "", leg.stat || ""].join("|");
+    var group = [leg.competition || "basketball", leg.gameId, leg.kind, leg.playerId || "", leg.propId || "", leg.stat || ""].join("|");
     if (groups[group]) throw new Error("A ticket cannot contain duplicate or opposite selections from the same market");
     groups[group] = true;
   });
@@ -673,8 +814,10 @@ function placeBet_(ticket) {
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
+    ensureBetLegColumns_();
     var config = getConfig_();
     if (!bool_(config.BETTING_OPEN)) throw new Error("Central betting is closed");
+    if (config.BEER_PARLAY_ENABLED !== undefined && !bool_(config.BEER_PARLAY_ENABLED) && ticket.legs.length > 1 && ticket.legs.some(function(leg) { return leg.competition === "beer-olympics" || (leg.competition === undefined && String(leg.gameId || "").indexOf("beer-") === 0); })) throw new Error("Beer parlays are disabled by the organizer");
     var expectedScenario = bool_(config.BRAD_PLAYS) ? "Brad Plays" : "Brad Out";
     if (ticket.scenario !== expectedScenario) throw new Error("Brad scenario changed; refresh the app before betting");
     var allowedParticipants = rows_("Participants").filter(function(row) { return row.Bettor && bool_(row["Active?"]); }).map(function(row) { return String(row.Bettor).trim(); });
@@ -691,6 +834,7 @@ function placeBet_(ticket) {
 
     var locked = {};
     rows_("Schedule & Results").forEach(function(row) { locked[row["Game ID"]] = bool_(row["Betting Locked?"]) || (row["Betting Enabled?"] !== undefined && row["Betting Enabled?"] !== "" && !bool_(row["Betting Enabled?"])); });
+    optionalRows_("Beer Schedule & Results").forEach(function(row) { locked[row["Matchup ID"]] = bool_(row["Betting Locked?"]) || !bool_(row["Betting Enabled?"]); });
     ticket.legs.forEach(function(leg) { if (locked[leg.gameId]) throw new Error(leg.gameId + " is locked"); });
 
     sheet_("Bets").appendRow([
@@ -698,11 +842,15 @@ function placeBet_(ticket) {
       Number(ticket.potentialReturn), ticket.scenario, "pending", 0, 0, Number(config.MODEL_VERSION || 1), config.EVENT_ID || ""
     ]);
     var legSheet = sheet_("Bet Legs");
+    var legHeaders = legSheet.getDataRange().getValues()[0];
+    var legIndex = index_(legHeaders);
     ticket.legs.forEach(function(leg, index) {
-      legSheet.appendRow([
-        ticket.id, index + 1, leg.gameId, leg.kind, leg.subject, leg.playerId || "", leg.teamId || "", leg.stat || "",
-        leg.side, leg.line === undefined ? "" : leg.line, leg.label, Number(leg.odds || 0), "pending"
-      ]);
+      var values = new Array(legHeaders.length).fill("");
+      values[legIndex["Bet ID"]] = ticket.id; values[legIndex["Leg #"]] = index + 1; values[legIndex["Game ID"]] = leg.gameId;
+      values[legIndex.Competition] = leg.competition || (String(leg.gameId).indexOf("beer-") === 0 ? "beer-olympics" : "basketball");
+      values[legIndex.Kind] = leg.kind; values[legIndex.Subject] = leg.subject; values[legIndex["Player ID"]] = leg.playerId || ""; values[legIndex["Prop ID"]] = leg.propId || "";
+      values[legIndex.Team] = leg.teamId || ""; values[legIndex.Stat] = leg.stat || ""; values[legIndex.Side] = leg.side; values[legIndex.Line] = leg.line === undefined ? "" : leg.line; values[legIndex.Label] = leg.label; values[legIndex["Leg Decimal Odds"]] = Number(leg.odds || 0); values[legIndex.Grade] = "pending";
+      legSheet.appendRow(values);
     });
     SpreadsheetApp.flush();
     return { ok: true, available: available - Number(ticket.stake) };

@@ -11,6 +11,10 @@ import type {
   GameDefinition,
   ModelConfig,
   TeamId,
+  BeerDieProp,
+  BeerEvent,
+  BeerMatchup,
+  BeerMoneyline,
 } from "../types";
 
 export const DEFAULT_SHARED_API_URL = "https://script.google.com/macros/s/AKfycbzcCsgpK6rPDJ0rCUSKjj454tPzHFkQPhrvmE97QtgqZVzwT5Jj0MrcXxDb3BAMXYxDdQ/exec";
@@ -67,6 +71,43 @@ export function modelConfigFromCommunity(community: CommunityState | null): Mode
   };
 }
 
+function teamId(value: unknown): TeamId | null {
+  return value === "Team A" || value === "Team B" || value === "Team C" ? value : null;
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (value === "" || value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function beerEventsFromCommunity(community: CommunityState | null): BeerEvent[] {
+  return community?.beerEvents ?? [];
+}
+
+export function beerMatchupsFromCommunity(community: CommunityState | null): BeerMatchup[] {
+  return (community?.beerMatchups ?? []).map((row, index) => ({
+    ...row,
+    eventNumber: Number(row.eventNumber || 0), sequence: Number(row.sequence || index + 1),
+    team1Id: teamId(row.team1Id) ?? "Team A", team2Id: teamId(row.team2Id) ?? "Team B",
+    winnerTeamId: teamId(row.winnerTeamId), team1Score: String(row.team1Score ?? ""), team2Score: String(row.team2Score ?? ""),
+  }));
+}
+
+export function beerMoneylinesFromCommunity(community: CommunityState | null): BeerMoneyline[] {
+  return (community?.beerMoneylines ?? []).map((row) => ({ ...row, teamId: teamId(row.teamId) ?? "Team A", americanOdds: numberOrNull(row.americanOdds) }));
+}
+
+export function beerDiePropsFromCommunity(community: CommunityState | null): BeerDieProp[] {
+  return (community?.beerDieProps ?? []).map((row) => ({
+    ...row,
+    teamId: teamId(row.teamId), line: numberOrNull(row.line),
+    overAmericanOdds: numberOrNull(row.overAmericanOdds), underAmericanOdds: numberOrNull(row.underAmericanOdds),
+    yesAmericanOdds: numberOrNull(row.yesAmericanOdds), noAmericanOdds: numberOrNull(row.noAmericanOdds), actualValue: numberOrNull(row.actualValue),
+    winningSide: row.winningSide || null,
+  }));
+}
+
 export async function loadCommunityState(apiUrl: string): Promise<CommunityState> {
   const separator = apiUrl.includes("?") ? "&" : "?";
   const response = await fetch(`${apiUrl}${separator}action=state&_=${Date.now()}`, { cache: "no-store", redirect: "follow" });
@@ -77,6 +118,8 @@ export async function loadCommunityState(apiUrl: string): Promise<CommunityState
     ...payload,
     players: normalizePlayers(payload.players ?? []), assignments: payload.assignments ?? [], schedule: payload.schedule ?? [],
     boxScores: payload.boxScores ?? [], bets: payload.bets ?? [], betLegs: payload.betLegs ?? [], participants: payload.participants ?? [],
+    beerEnabled: payload.beerEnabled === true || String(payload.beerEnabled ?? payload.config?.BEER_OLYMPICS_ENABLED).toUpperCase() === "TRUE",
+    beerEvents: payload.beerEvents ?? [], beerMatchups: payload.beerMatchups ?? [], beerMoneylines: payload.beerMoneylines ?? [], beerDieProps: payload.beerDieProps ?? [],
     loadedAt: new Date().toISOString(),
   };
 }
@@ -146,8 +189,10 @@ export function sharedTickets(community: CommunityState): Ticket[] {
       marketId: `${leg.betId}:${leg.legNumber}`,
       gameId: leg.gameId,
       kind: leg.kind,
+      competition: leg.competition || (String(leg.gameId).startsWith("beer-") ? "beer-olympics" : "basketball"),
       subject: leg.subject,
       playerId: leg.playerId || undefined,
+      propId: leg.propId || undefined,
       teamId: leg.teamId || undefined,
       stat: leg.stat || undefined,
       side: leg.side,

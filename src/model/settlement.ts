@@ -1,5 +1,5 @@
 import { GAMES } from "../types";
-import type { GameDefinition, GameResult, PersistedState, StatKey, Ticket, TicketLeg, TicketStatus } from "../types";
+import type { BeerDieProp, BeerMatchup, GameDefinition, GameResult, PersistedState, StatKey, Ticket, TicketLeg, TicketStatus } from "../types";
 
 type Grade = "win" | "loss" | "push" | "pending";
 
@@ -19,7 +19,22 @@ function playerStat(result: GameResult, playerId: string, stat: StatKey): number
   return box.points + box.rebounds + box.assists;
 }
 
-export function gradeLeg(leg: TicketLeg, results: PersistedState["results"], games: GameDefinition[] = GAMES): Grade {
+export function gradeLeg(leg: TicketLeg, results: PersistedState["results"], games: GameDefinition[] = GAMES, beerMatchups: BeerMatchup[] = [], beerProps: BeerDieProp[] = []): Grade {
+  if (leg.competition === "beer-olympics") {
+    const matchup = beerMatchups.find((candidate) => candidate.matchupId === leg.gameId);
+    if (!matchup) return "pending";
+    if (leg.kind === "moneyline") {
+      if (!matchup.final || !matchup.winnerTeamId || !leg.teamId) return "pending";
+      return matchup.winnerTeamId === leg.teamId ? "win" : "loss";
+    }
+    if (leg.kind === "beer-prop" && leg.propId) {
+      const prop = beerProps.find((candidate) => candidate.propId === leg.propId);
+      if (!prop?.final) return "pending";
+      if (prop.marketType === "yes-no" && (leg.side === "yes" || leg.side === "no")) return prop.winningSide === leg.side ? "win" : "loss";
+      if (prop.marketType === "over-under" && prop.actualValue !== null && prop.line !== null && (leg.side === "over" || leg.side === "under")) return compare(prop.actualValue, prop.line, leg.side);
+    }
+    return "pending";
+  }
   const result = results[leg.gameId];
   if (!result?.final || result.team1Score === null || result.team2Score === null) return "pending";
   const game = games.find((candidate) => candidate.id === leg.gameId);
@@ -50,8 +65,8 @@ export function gradeLeg(leg: TicketLeg, results: PersistedState["results"], gam
   return "pending";
 }
 
-export function settleTicket(ticket: Ticket, results: PersistedState["results"], games: GameDefinition[] = GAMES): Ticket {
-  const grades = ticket.legs.map((leg) => gradeLeg(leg, results, games));
+export function settleTicket(ticket: Ticket, results: PersistedState["results"], games: GameDefinition[] = GAMES, beerMatchups: BeerMatchup[] = [], beerProps: BeerDieProp[] = []): Ticket {
+  const grades = ticket.legs.map((leg) => gradeLeg(leg, results, games, beerMatchups, beerProps));
   let status: TicketStatus = "pending";
   let settledReturn = 0;
   if (grades.includes("loss")) status = "lost";
@@ -66,8 +81,8 @@ export function settleTicket(ticket: Ticket, results: PersistedState["results"],
   return { ...ticket, status, settledReturn };
 }
 
-export function settleTickets(tickets: Ticket[], results: PersistedState["results"], games: GameDefinition[] = GAMES): Ticket[] {
-  return tickets.map((ticket) => settleTicket(ticket, results, games));
+export function settleTickets(tickets: Ticket[], results: PersistedState["results"], games: GameDefinition[] = GAMES, beerMatchups: BeerMatchup[] = [], beerProps: BeerDieProp[] = []): Ticket[] {
+  return tickets.map((ticket) => settleTicket(ticket, results, games, beerMatchups, beerProps));
 }
 
 export function ledger(tickets: Ticket[]): { available: number; totalStaked: number; returns: number; profit: number } {

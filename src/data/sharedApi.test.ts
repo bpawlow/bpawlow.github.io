@@ -13,6 +13,7 @@ const community: CommunityState = {
   boxScores: [{ gameId: "game-1", scenario: "Brad Out", playerId: "alex", playerName: "Alex", teamId: "Team A", played: true, points: 8, rebounds: 4, assists: 2, threes: 2 }],
   bets: [{ betId: "b1", submittedAt: "2026-01-01", bettor: "Ben", stake: 10, decimalOdds: 2, americanOdds: 100, potentialReturn: 20, scenario: "Brad Out", status: "pending", settledReturn: 0, profit: 0, modelVersion: 2, eventId: "event" }],
   betLegs: [{ betId: "b1", legNumber: 1, gameId: "game-1", kind: "moneyline", subject: "Winner", side: "team1", label: "Team A", odds: 2 }],
+  beerEnabled: false, beerEvents: [], beerMatchups: [], beerMoneylines: [], beerDieProps: [],
 };
 
 describe("shared Sheet state", () => {

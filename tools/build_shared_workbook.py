@@ -169,6 +169,63 @@ add_validation(schedule, '"UPCOMING,LIVE,FINAL"', "L2:L100")
 add_validation(schedule, '"TRUE,FALSE"', "J2:K100")
 add_validation(schedule, '"TRUE,FALSE"', "O2:P100")
 
+beer_config = new_sheet(wb, "Beer Olympics Config", ["Key", "Value", "Description"], {"A": 28, "B": 24, "C": 72})
+for item in [
+    ("BEER_OLYMPICS_ENABLED", False, "Set TRUE to show Beer Olympics in the website."),
+    ("BEER_MODEL_VERSION", 1, "Increment after changing Beer schedule or manual market assumptions."),
+    ("BEER_STANDINGS_ENABLED", True, "Set FALSE to hide Beer wins/losses standings."),
+    ("BEER_PARLAY_ENABLED", True, "Set FALSE to prevent Beer markets from entering parlays."),
+]:
+    beer_config.append(item)
+    beer_config.cell(beer_config.max_row, 2).fill = PatternFill("solid", fgColor=YELLOW)
+
+beer_schedule = new_sheet(
+    wb,
+    "Beer Schedule & Results",
+    ["Event ID", "Event #", "Event Name", "Matchup ID", "Sequence", "Team 1 ID", "Team 1", "Team 2 ID", "Team 2", "Status", "Betting Enabled?", "Betting Locked?", "Counts Toward Standings?", "Winner Team ID", "Team 1 Score/Time", "Team 2 Score/Time", "Final?", "Updated At", "Notes"],
+    {"A": 24, "B": 10, "C": 30, "D": 28, "E": 10, "F": 14, "G": 18, "H": 14, "I": 18, "J": 14, "K": 18, "L": 18, "M": 25, "N": 18, "O": 20, "P": 20, "Q": 10, "R": 22, "S": 38},
+)
+beer_events = [
+    ("beer-kayak", 1, "Kayak Race / Battle Royale"),
+    ("beer-chug-cornhole", 2, "Beer Chug + Cornhole"),
+    ("beer-die", 3, "Beer Die"),
+    ("beer-spikeball", 4, "Spikeball"),
+    ("beer-football", 5, "Beer Football"),
+]
+beer_pairs = [("Team A", "Team B"), ("Team B", "Team C"), ("Team C", "Team A")]
+beer_schedule_rows = []
+sequence = 1
+for event_id, event_number, event_name in beer_events:
+    for matchup_number, (team1, team2) in enumerate(beer_pairs, 1):
+        beer_schedule_rows.append([event_id, event_number, event_name, f"{event_id}-matchup-{matchup_number}", sequence, team1, team1, team2, team2, "UPCOMING", True, False, True, "", "", "", False, "", ""])
+        sequence += 1
+for row in beer_schedule_rows:
+    beer_schedule.append(row)
+for row in range(2, beer_schedule.max_row + 1):
+    for column in range(10, 18):
+        beer_schedule.cell(row, column).fill = PatternFill("solid", fgColor=YELLOW)
+add_validation(beer_schedule, '"UPCOMING,LIVE,FINAL"', "J2:J100")
+add_validation(beer_schedule, '"TRUE,FALSE"', "K2:M100")
+add_validation(beer_schedule, '"TRUE,FALSE"', "Q2:Q100")
+add_validation(beer_schedule, '"Team A,Team B,Team C"', "N2:N100")
+
+beer_moneylines = new_sheet(wb, "Beer Moneylines", ["Matchup ID", "Team ID", "Team Name", "American Odds", "Betting Enabled?", "Notes"], {"A": 30, "B": 14, "C": 22, "D": 18, "E": 18, "F": 42})
+for row in beer_schedule_rows:
+    for team in (row[5], row[7]):
+        beer_moneylines.append([row[3], team, team, "", True, "Enter manual American odds."])
+for row in range(2, beer_moneylines.max_row + 1):
+    beer_moneylines.cell(row, 4).fill = PatternFill("solid", fgColor=YELLOW)
+add_validation(beer_moneylines, '"TRUE,FALSE"', "E2:E200")
+
+beer_props = new_sheet(wb, "Beer Die Props", ["Prop ID", "Matchup ID", "Prop Name", "Scope", "Team ID", "Market Type", "Line", "Over American Odds", "Under American Odds", "Yes American Odds", "No American Odds", "Actual Result Value", "Winning Side", "Betting Enabled?", "Betting Locked?", "Final?", "Notes"], {"A": 24, "B": 30, "C": 28, "D": 14, "E": 14, "F": 16, "G": 10, "H": 18, "I": 20, "J": 18, "K": 18, "L": 20, "M": 16, "N": 18, "O": 18, "P": 10, "Q": 42})
+for row in range(2, 102):
+    for column in range(1, 18):
+        beer_props.cell(row, column).fill = PatternFill("solid", fgColor=YELLOW)
+add_validation(beer_props, '"team,matchup"', "D2:D100")
+add_validation(beer_props, '"yes-no,over-under"', "F2:F100")
+add_validation(beer_props, '"over,under,yes,no"', "M2:M100")
+add_validation(beer_props, '"TRUE,FALSE"', "N2:P100")
+
 assignments = wb["Team Assignments"]
 assignment_rows = []
 for row in range(2, assignments.max_row + 1):
@@ -230,8 +287,8 @@ bets = new_sheet(
 legs = new_sheet(
     wb,
     "Bet Legs",
-    ["Bet ID", "Leg #", "Game ID", "Kind", "Subject", "Player ID", "Team", "Stat", "Side", "Line", "Label", "Leg Decimal Odds", "Grade"],
-    {"A": 38, "B": 10, "C": 13, "D": 16, "E": 22, "F": 18, "G": 13, "H": 13, "I": 12, "J": 11, "K": 45, "L": 20, "M": 12},
+    ["Bet ID", "Leg #", "Game ID", "Competition", "Kind", "Subject", "Player ID", "Prop ID", "Team", "Stat", "Side", "Line", "Label", "Leg Decimal Odds", "Grade"],
+    {"A": 38, "B": 10, "C": 28, "D": 18, "E": 16, "F": 28, "G": 18, "H": 24, "I": 13, "J": 13, "K": 12, "L": 11, "M": 45, "N": 20, "O": 12},
 )
 
 bet_board = new_sheet(wb, "Betting Leaderboard", ["Bettor", "Tickets", "Total Staked", "Settled Return", "Profit", "Units Available"], {"A": 24, "B": 12, "C": 18, "D": 20, "E": 14, "F": 18})
@@ -297,7 +354,7 @@ readme.column_dimensions["B"].width = 100
 
 preferred_order = [
     "READ ME FIRST", "App Config", "Quick Player Ratings", "Rating Normalization", "Team Assignments", "Game Rosters", "Team Ratings",
-    "Schedule & Results", "Box Scores", "Participants", "Bets", "Bet Legs", "Betting Leaderboard", "Player Leaderboard",
+    "Schedule & Results", "Beer Olympics Config", "Beer Schedule & Results", "Beer Moneylines", "Beer Die Props", "Box Scores", "Participants", "Bets", "Bet Legs", "Betting Leaderboard", "Player Leaderboard",
 ]
 wb._sheets = [wb[name] for name in preferred_order]
 wb.save(PATH)

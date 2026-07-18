@@ -46,6 +46,19 @@ def copy_row_style(sheet, source_row: int, target_row: int, columns: int) -> Non
         target.number_format = source.number_format
 
 
+def ensure_sheet(workbook, title: str, headers: list[str]):
+    sheet = workbook[title] if title in workbook.sheetnames else workbook.create_sheet(title)
+    existing = [sheet.cell(1, column).value for column in range(1, sheet.max_column + 1)] if sheet.max_column else []
+    if not existing or existing[0] is None:
+        sheet.append(headers)
+    else:
+        for header in headers:
+            if header not in existing:
+                sheet.cell(1, sheet.max_column + 1).value = header
+                existing.append(header)
+    return sheet
+
+
 def migrate(path: Path) -> None:
     workbook = load_workbook(path)
 
@@ -108,6 +121,47 @@ def migrate(path: Path) -> None:
         }
         for header, value in values.items():
             schedule.cell(row, columns[header]).value = value
+
+    beer_config = ensure_sheet(workbook, "Beer Olympics Config", ["Key", "Value", "Description"])
+    existing_beer_config = {beer_config.cell(row, 1).value for row in range(2, beer_config.max_row + 1)}
+    for item in (
+        ("BEER_OLYMPICS_ENABLED", False, "Set TRUE to show Beer Olympics in the website."),
+        ("BEER_MODEL_VERSION", 1, "Increment after changing Beer schedule or manual market assumptions."),
+        ("BEER_STANDINGS_ENABLED", True, "Set FALSE to hide Beer wins/losses standings."),
+        ("BEER_PARLAY_ENABLED", True, "Set FALSE to prevent Beer markets from entering parlays."),
+    ):
+        if item[0] not in existing_beer_config:
+            beer_config.append(list(item))
+
+    beer_schedule = ensure_sheet(workbook, "Beer Schedule & Results", ["Event ID", "Event #", "Event Name", "Matchup ID", "Sequence", "Team 1 ID", "Team 1", "Team 2 ID", "Team 2", "Status", "Betting Enabled?", "Betting Locked?", "Counts Toward Standings?", "Winner Team ID", "Team 1 Score/Time", "Team 2 Score/Time", "Final?", "Updated At", "Notes"])
+    if beer_schedule.max_row < 2:
+        events = [("beer-kayak", 1, "Kayak Race / Battle Royale"), ("beer-chug-cornhole", 2, "Beer Chug + Cornhole"), ("beer-die", 3, "Beer Die"), ("beer-spikeball", 4, "Spikeball"), ("beer-football", 5, "Beer Football")]
+        pairs = [("Team A", "Team B"), ("Team B", "Team C"), ("Team C", "Team A")]
+        rows = []
+        sequence = 1
+        for event_id, number, name in events:
+            for matchup_number, (team1, team2) in enumerate(pairs, 1):
+                rows.append([event_id, number, name, f"{event_id}-matchup-{matchup_number}", sequence, team1, team1, team2, team2, "UPCOMING", True, False, True, "", "", "", False, "", ""])
+                sequence += 1
+        for row in rows:
+            beer_schedule.append(row)
+
+    beer_moneylines = ensure_sheet(workbook, "Beer Moneylines", ["Matchup ID", "Team ID", "Team Name", "American Odds", "Betting Enabled?", "Notes"])
+    if beer_moneylines.max_row < 2:
+        for row in range(2, beer_schedule.max_row + 1):
+            matchup_id = beer_schedule.cell(row, 4).value
+            for team_column in (6, 8):
+                team = beer_schedule.cell(row, team_column).value
+                beer_moneylines.append([matchup_id, team, team, "", True, "Enter manual American odds."])
+
+    ensure_sheet(workbook, "Beer Die Props", ["Prop ID", "Matchup ID", "Prop Name", "Scope", "Team ID", "Market Type", "Line", "Over American Odds", "Under American Odds", "Yes American Odds", "No American Odds", "Actual Result Value", "Winning Side", "Betting Enabled?", "Betting Locked?", "Final?", "Notes"])
+
+    legs = workbook["Bet Legs"]
+    leg_headers = [legs.cell(1, column).value for column in range(1, legs.max_column + 1)]
+    for header in ("Competition", "Prop ID"):
+        if header not in leg_headers:
+            legs.cell(1, legs.max_column + 1).value = header
+            leg_headers.append(header)
 
     if "Game Rosters" not in workbook.sheetnames:
         workbook.create_sheet("Game Rosters")

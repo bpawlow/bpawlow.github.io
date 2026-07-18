@@ -3,7 +3,7 @@ import type { ChangeEvent, ReactElement } from "react";
 import "./App.css";
 import { exportState, importState, loadState, saveState } from "./data/persistence";
 import { loadBasketballData, sheetPublicUrl } from "./data/googleSheets";
-import { gamesFromSchedule, isGameLocked, loadCommunityState, modelConfigFromCommunity, registerSharedParticipant, resultsFromCommunity, sharedTickets, submitSharedTicket } from "./data/sharedApi";
+import { beerDiePropsFromCommunity, beerEventsFromCommunity, beerMatchupsFromCommunity, beerMoneylinesFromCommunity, gamesFromSchedule, isGameLocked, loadCommunityState, modelConfigFromCommunity, registerSharedParticipant, resultsFromCommunity, sharedTickets, submitSharedTicket } from "./data/sharedApi";
 import { formatAmerican, money } from "./model/odds";
 import { canStake, gradeLeg, ledger, settleTickets } from "./model/settlement";
 import { SimulationClient } from "./model/simulationClient";
@@ -11,6 +11,7 @@ import { calculateStandings } from "./model/standings";
 import { hasContradictorySpreadMoneyline } from "./model/marketGuardrails";
 import { playerLeaderboard } from "./model/leaderboard";
 import { assignmentsForTeam } from "./model/rosters";
+import { beerMarkets, beerParlayPrice, calculateBeerStandings } from "./model/beer";
 import { GAMES, SCORING_RULES, TEAM_COLORS } from "./types";
 import type {
   BasketballData,
@@ -26,9 +27,11 @@ import type {
   StatKey,
   TeamId,
   Ticket,
+  BeerEvent,
+  BeerMatchup,
 } from "./types";
 
-type Tab = "sportsbook" | "bets" | "leaderboard" | "tournament" | "rules";
+type Tab = "sportsbook" | "beer" | "bets" | "leaderboard" | "tournament" | "rules";
 type TeamNames = Record<TeamId, string>;
 
 const DEFAULT_TEAM_NAMES: TeamNames = { "Team A": "Team A", "Team B": "Team B", "Team C": "Team C" };
@@ -129,6 +132,7 @@ function BetSlip({ selections, price, pricing, submitting, mobileOpen, stake, av
   const american = selections.length === 1 ? selections[0].americanOdds : price?.americanOdds ?? 0;
   const stakeNumber = Number.parseFloat(stake) || 0;
   const payout = stakeNumber * decimal;
+  const manual = selections.some((selection) => selection.competition === "beer-olympics");
   return (
     <aside className={`bet-slip ${mobileOpen ? "mobile-open" : ""}`}>
       <div className="slip-heading">
@@ -153,7 +157,7 @@ function BetSlip({ selections, price, pricing, submitting, mobileOpen, stake, av
             <strong>{pricing ? "Pricing…" : formatAmerican(american)}</strong>
           </div>
           {selections.length > 1 && price && (
-            <p className="model-note">Joint win probability {(price.fairProbability * 100).toFixed(1)}% · priced from {price.eligibleSamples.toLocaleString()} tournament simulations</p>
+            <p className="model-note">{manual ? "Combined manual market prices" : `Joint win probability ${(price.fairProbability * 100).toFixed(1)}% · priced from ${price.eligibleSamples.toLocaleString()} tournament simulations`}</p>
           )}
           <label className="stake-field">
             <span>Stake <small>{money(available)} available</small></span>
@@ -236,7 +240,53 @@ function Sportsbook({ data, summary, games, teamNames, gameId, setGameId, select
   );
 }
 
-function TicketsView({ tickets, results, games, teamNames }: { tickets: Ticket[]; results: PersistedState["results"]; games: BasketballData["games"]; teamNames: TeamNames }): ReactElement {
+function BeerView({ events, matchups, markets, teamNames, standingsEnabled, selections, toggleMarket }: {
+  events: BeerEvent[];
+  matchups: BeerMatchup[];
+  markets: MarketSelection[];
+  teamNames: TeamNames;
+  standingsEnabled: boolean;
+  selections: MarketSelection[];
+  toggleMarket: (market: MarketSelection) => void;
+}): ReactElement {
+  const [eventId, setEventId] = useState(events[0]?.eventId ?? "");
+  useEffect(() => {
+    if (events.length && !events.some((event) => event.eventId === eventId)) setEventId(events[0].eventId);
+  }, [events, eventId]);
+  const selectedIds = new Set(selections.map((item) => item.id));
+  const standings = calculateBeerStandings(matchups);
+  const event = events.find((candidate) => candidate.eventId === eventId) ?? events[0];
+  const eventMatchups = matchups.filter((matchup) => matchup.eventId === event?.eventId).sort((a, b) => a.sequence - b.sequence);
+  const grouped = (matchupId: string) => {
+    const groups = new Map<string, MarketSelection[]>();
+    markets.filter((market) => market.gameId === matchupId).forEach((market) => groups.set(market.groupId, [...(groups.get(market.groupId) ?? []), market]));
+    return [...groups.values()];
+  };
+  if (!events.length) return <div className="empty-page"><span>◎</span><h2>Beer Olympics not configured</h2><p>Add the Beer Olympics tabs to the shared Sheet and enable the feature.</p></div>;
+  return (
+    <div className="page-stack beer-page">
+      <div className="page-heading"><span className="eyebrow">Separate competition</span><h1>Beer Olympics</h1><p>Matchups, manually priced markets, and wins-only standings.</p></div>
+      {standingsEnabled && <section className="standings-card leaderboard-card">
+        <div className="section-title"><div><span className="eyebrow">Live table</span><h2>Beer standings</h2></div><span>Wins and losses only</span></div>
+        <div className="bettor-head"><span>Rank / Team</span><span>Wins</span><span>Losses</span><span></span><span></span></div>
+        {standings.map((row) => <div className="bettor-row" key={row.teamId}><span><b>{row.rank}</b><TeamPill team={row.teamId} names={teamNames} /></span><strong>{row.wins}</strong><span>{row.losses}</span><span></span><span></span></div>)}
+      </section>}
+      <div className="game-tabs beer-event-tabs" role="tablist">
+        {events.map((item) => <button type="button" role="tab" aria-selected={item.eventId === event?.eventId} className={item.eventId === event?.eventId ? "active" : ""} key={item.eventId} onClick={() => setEventId(item.eventId)}><span>Event {item.number}</span><small>{item.name}</small></button>)}
+      </div>
+      {eventMatchups.map((matchup) => (
+        <section className="market-card beer-matchup-card" key={matchup.matchupId}>
+          <div className="section-title"><div><span className="eyebrow">Matchup {matchup.sequence}</span><h2><TeamPill team={matchup.team1Id} names={teamNames} /> <i>vs</i> <TeamPill team={matchup.team2Id} names={teamNames} /></h2></div><span className={matchup.final ? "final-tag" : "pending-tag"}>{matchup.final ? "Final" : matchup.status}</span></div>
+          <div className="beer-score-line"><span>{matchup.team1Score || "—"}</span><b>Winner: {matchup.winnerTeamId ? teamNames[matchup.winnerTeamId] : "pending"}</b><span>{matchup.team2Score || "—"}</span></div>
+          {grouped(matchup.matchupId).map((pair) => <MarketPair key={pair[0].groupId} pair={pair} selectedIds={selectedIds} onToggle={toggleMarket} />)}
+          {!grouped(matchup.matchupId).length && <p className="leaderboard-empty">No markets are configured for this matchup yet.</p>}
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function TicketsView({ tickets, results, games, beerMatchups, beerProps, teamNames }: { tickets: Ticket[]; results: PersistedState["results"]; games: BasketballData["games"]; beerMatchups: BeerMatchup[]; beerProps: CommunityState["beerDieProps"]; teamNames: TeamNames }): ReactElement {
   if (!tickets.length) return <div className="empty-page"><span>⌁</span><h2>No tickets yet</h2><p>Your straight bets and parlays will appear here.</p></div>;
   return (
     <div className="page-stack">
@@ -244,7 +294,7 @@ function TicketsView({ tickets, results, games, teamNames }: { tickets: Ticket[]
       {tickets.slice().reverse().map((ticket) => (
         <article className="ticket-card" key={ticket.id}>
           <header><div><span className={`status ${ticket.status}`}>{ticket.status}</span><strong>{ticket.legs.length > 1 ? `${ticket.legs.length}-leg parlay` : "Straight bet"}</strong></div><time>{new Date(ticket.createdAt).toLocaleString()}</time></header>
-          <div className="ticket-legs">{ticket.legs.map((leg) => <div key={leg.marketId}><span className={`grade grade-${gradeLeg(leg, results, games)}`}></span><p><strong>{replaceTeamLabels(leg.label, teamNames)}</strong><small>{gradeLeg(leg, results, games)}</small></p></div>)}</div>
+          <div className="ticket-legs">{ticket.legs.map((leg) => <div key={leg.marketId}><span className={`grade grade-${gradeLeg(leg, results, games, beerMatchups, beerProps)}`}></span><p><strong>{replaceTeamLabels(leg.label, teamNames)}</strong><small>{gradeLeg(leg, results, games, beerMatchups, beerProps)}</small></p></div>)}</div>
           <footer><span>Stake <b>{money(ticket.stake)}</b></span><span>Odds <b>{formatAmerican(ticket.americanOdds)}</b></span><span>{ticket.status === "won" ? "Returned" : "To return"} <b>{money(ticket.status === "won" ? ticket.settledReturn : ticket.potentialReturn)}</b></span></footer>
         </article>
       ))}
@@ -311,9 +361,9 @@ function TournamentView({ data, games, scenario, teamNames, results, onResults, 
   );
 }
 
-function LeaderboardView({ community, results, games, scenario }: { community: CommunityState | null; results: PersistedState["results"]; games: BasketballData["games"]; scenario: Scenario }): ReactElement {
+function LeaderboardView({ community, results, games, beerMatchups, beerProps, scenario }: { community: CommunityState | null; results: PersistedState["results"]; games: BasketballData["games"]; beerMatchups: BeerMatchup[]; beerProps: CommunityState["beerDieProps"]; scenario: Scenario }): ReactElement {
   if (!community) return <div className="empty-page"><span>◎</span><h2>Connecting the shared leaderboard</h2><p>The app will retry automatically. Refresh the page if this message remains visible.</p></div>;
-  const centralized = settleTickets(sharedTickets(community), results, games);
+  const centralized = settleTickets(sharedTickets(community), results, games, beerMatchups, beerProps);
   const names = new Set([...community.participants, ...centralized.map((ticket) => ticket.participant)]);
   const bettors = [...names].map((name) => {
     const tickets = centralized.filter((ticket) => ticket.participant === name);
@@ -413,6 +463,14 @@ export default function App(): ReactElement {
   }, [teamNameSignature]);
 
   const officialResults = useMemo(() => resultsFromCommunity(community) ?? persisted.results, [community, persisted.results]);
+  const beerEnabled = Boolean(community?.beerEnabled);
+  const beerStandingsEnabled = community?.config.BEER_STANDINGS_ENABLED === undefined || community.config.BEER_STANDINGS_ENABLED === true || String(community.config.BEER_STANDINGS_ENABLED).toUpperCase() === "TRUE";
+  const beerParlayEnabled = community?.config.BEER_PARLAY_ENABLED === undefined || community.config.BEER_PARLAY_ENABLED === true || String(community.config.BEER_PARLAY_ENABLED).toUpperCase() === "TRUE";
+  const beerEvents = useMemo(() => beerEventsFromCommunity(community), [community]);
+  const beerMatchups = useMemo(() => beerMatchupsFromCommunity(community), [community]);
+  const beerMoneylines = useMemo(() => beerMoneylinesFromCommunity(community), [community]);
+  const beerProps = useMemo(() => beerDiePropsFromCommunity(community), [community]);
+  const beerMarketSelections = useMemo(() => beerMarkets(beerMatchups, beerMoneylines, beerProps), [beerMatchups, beerMoneylines, beerProps]);
   const accountTickets = useMemo(() => {
     if (!community) return persisted.tickets;
     const central = sharedTickets(community).filter((ticket) => ticket.participant === persisted.participant);
@@ -424,7 +482,7 @@ export default function App(): ReactElement {
       return new Date(ticket.createdAt).getTime() > communityLoadedAt;
     })];
   }, [community, persisted.participant, persisted.tickets]);
-  const settledTickets = useMemo(() => settleTickets(accountTickets, officialResults, activeGames), [accountTickets, officialResults, activeGames]);
+  const settledTickets = useMemo(() => settleTickets(accountTickets, officialResults, activeGames, beerMatchups, beerProps), [accountTickets, officialResults, activeGames, beerMatchups, beerProps]);
   const account = useMemo(() => ledger(settledTickets), [settledTickets]);
   const requirement = Math.min(100, account.totalStaked);
 
@@ -503,6 +561,11 @@ export default function App(): ReactElement {
 
   useEffect(() => {
     if (selections.length <= 1) { setParlayPrice(null); setPricing(false); return; }
+    if (selections.some((selection) => selection.competition === "beer-olympics")) {
+      setPricing(false);
+      setParlayPrice(beerParlayPrice(selections));
+      return;
+    }
     let cancelled = false;
     setPricing(true);
     clientRef.current?.price(selections.map((item) => item.id))
@@ -513,9 +576,12 @@ export default function App(): ReactElement {
   }, [selections]);
 
   const toggleMarket = (market: MarketSelection) => {
-    if (isGameLocked(community, market.gameId)) { setToast(`Game ${market.gameNumber} betting is locked`); return; }
+    const beerMatchup = market.competition === "beer-olympics" ? beerMatchups.find((matchup) => matchup.matchupId === market.gameId) : null;
+    if (beerMatchup?.bettingLocked || beerMatchup?.bettingEnabled === false || isGameLocked(community, market.gameId)) { setToast(`Matchup ${market.gameNumber} betting is locked`); return; }
     setSelections((current) => {
       if (current.some((item) => item.id === market.id)) return current.filter((item) => item.id !== market.id);
+      if (market.competition === "beer-olympics" && current.length > 0 && !beerParlayEnabled) { setToast("Beer parlays are disabled by the organizer"); return current; }
+      if (market.competition !== "beer-olympics" && current.some((item) => item.competition === "beer-olympics") && !beerParlayEnabled) { setToast("Beer parlays are disabled by the organizer"); return current; }
       if (hasContradictorySpreadMoneyline(market, current)) { setToast("That spread and moneyline cannot both win"); return current; }
       const withoutOpposite = current.filter((item) => item.groupId !== market.groupId);
       if (withoutOpposite.length >= 6) { setToast("Parlays are limited to 6 legs"); return current; }
@@ -538,7 +604,7 @@ export default function App(): ReactElement {
       id: crypto.randomUUID(), createdAt: new Date().toISOString(), participant: persisted.participant,
       scenario: persisted.scenario, stake: stakeNumber, decimalOdds: price.decimalOdds, americanOdds: price.americanOdds,
       potentialReturn: Number((stakeNumber * price.decimalOdds).toFixed(2)), fairProbability: price.fairProbability,
-      legs: selections.map((market) => ({ marketId: market.id, gameId: market.gameId, kind: market.kind, subject: canonicalizeTeamLabels(market.subject, teamNames), playerId: market.playerId, teamId: market.teamId, stat: market.stat, side: market.side, line: market.line, label: canonicalizeTeamLabels(market.label, teamNames), odds: market.decimalOdds })),
+      legs: selections.map((market) => ({ marketId: market.id, gameId: market.gameId, kind: market.kind, competition: market.competition, subject: canonicalizeTeamLabels(market.subject, teamNames), playerId: market.playerId, propId: market.propId, teamId: market.teamId, stat: market.stat, side: market.side, line: market.line, label: canonicalizeTeamLabels(market.label, teamNames), odds: market.decimalOdds })),
       status: "pending", settledReturn: 0, centralized: Boolean(persisted.sharedApiUrl),
     };
     try {
@@ -623,7 +689,7 @@ export default function App(): ReactElement {
       <header className="topbar">
         <button className="brand" type="button" onClick={() => setTab("sportsbook")}><span className="brand-ball">21</span><span><b>THE BACHELOR BOOK</b><small>Three teams. One champion.</small></span></button>
         <nav>
-          {(["sportsbook", "bets", "leaderboard", "tournament", "rules"] as Tab[]).map((item) => <button className={tab === item ? "active" : ""} type="button" key={item} onClick={() => setTab(item)}>{item === "sportsbook" ? "Markets" : item === "bets" ? "My bets" : item[0].toUpperCase() + item.slice(1)}</button>)}
+          {(["sportsbook", ...(beerEnabled ? ["beer"] : []), "bets", "leaderboard", "tournament", "rules"] as Tab[]).map((item) => <button className={tab === item ? "active" : ""} type="button" key={item} onClick={() => setTab(item)}>{item === "sportsbook" ? "Markets" : item === "beer" ? "Beer Olympics" : item === "bets" ? "My bets" : item[0].toUpperCase() + item.slice(1)}</button>)}
         </nav>
         <div className="header-actions">
           <button className="balance-button" type="button" onClick={() => setShowProfile(true)}><span>{persisted.participant || "Player"}</span><strong>{money(account.available)} <small>u</small></strong></button>
@@ -639,17 +705,18 @@ export default function App(): ReactElement {
       {!summary || !data ? (
         <main className="loading-screen"><div className="loader-ball">21</div><h1>Building the board</h1><p>{loadingText}</p><div className="loading-line"><i></i></div></main>
       ) : (
-        <main className={`main-layout ${tab === "sportsbook" ? "with-slip" : ""}`}>
+        <main className={`main-layout ${tab === "sportsbook" || tab === "beer" ? "with-slip" : ""}`}>
           {tab === "sportsbook" && <Sportsbook data={data} summary={summary} games={activeGames} teamNames={teamNames} gameId={gameId} setGameId={setGameId} selections={selections} toggleMarket={toggleMarket} />}
-          {tab === "bets" && <TicketsView tickets={settledTickets} results={officialResults} games={activeGames} teamNames={teamNames} />}
-          {tab === "leaderboard" && <LeaderboardView community={community} results={officialResults} games={activeGames} scenario={persisted.scenario} />}
+          {tab === "beer" && <BeerView events={beerEvents} matchups={beerMatchups} markets={beerMarketSelections} teamNames={teamNames} standingsEnabled={beerStandingsEnabled} selections={selections} toggleMarket={toggleMarket} />}
+          {tab === "bets" && <TicketsView tickets={settledTickets} results={officialResults} games={activeGames} beerMatchups={beerMatchups} beerProps={beerProps} teamNames={teamNames} />}
+          {tab === "leaderboard" && <LeaderboardView community={community} results={officialResults} games={activeGames} beerMatchups={beerMatchups} beerProps={beerProps} scenario={persisted.scenario} />}
           {tab === "tournament" && <TournamentView data={data} games={activeGames} scenario={persisted.scenario} teamNames={teamNames} results={officialResults} readOnly={Boolean(community)} onResults={(results) => setPersisted((current) => ({ ...current, results }))} />}
           {tab === "rules" && <RulesView />}
-          {tab === "sportsbook" && <BetSlip selections={selections} price={parlayPrice} pricing={pricing} submitting={submitting} mobileOpen={mobileSlipOpen} stake={stake} available={account.available} onStake={setStake} onRemove={(id) => setSelections((current) => current.filter((item) => item.id !== id))} onClear={() => { setSelections([]); setMobileSlipOpen(false); }} onPlace={placeBet} onMobileClose={() => setMobileSlipOpen(false)} />}
+          {(tab === "sportsbook" || tab === "beer") && <BetSlip selections={selections} price={parlayPrice} pricing={pricing} submitting={submitting} mobileOpen={mobileSlipOpen} stake={stake} available={account.available} onStake={setStake} onRemove={(id) => setSelections((current) => current.filter((item) => item.id !== id))} onClear={() => { setSelections([]); setMobileSlipOpen(false); }} onPlace={placeBet} onMobileClose={() => setMobileSlipOpen(false)} />}
         </main>
       )}
 
-      {tab === "sportsbook" && selections.length > 0 && summary && !mobileSlipOpen && (
+      {(tab === "sportsbook" || tab === "beer") && selections.length > 0 && summary && !mobileSlipOpen && (
         <button className="mobile-slip-launcher" type="button" onClick={() => setMobileSlipOpen(true)}>
           <span><b>{selections.length}</b>{selections.length === 1 ? " pick" : " picks"}</span>
           <strong>View bet slip</strong>

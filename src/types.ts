@@ -1,8 +1,9 @@
 export type Scenario = "Brad Out" | "Brad Plays";
 export type TeamId = "Team A" | "Team B" | "Team C";
 export type GameId = string;
+export type Competition = "basketball" | "beer-olympics";
 export type StatKey = "points" | "rebounds" | "assists" | "threes" | "pr" | "pa" | "ra" | "pra";
-export type MarketKind = "moneyline" | "spread" | "total" | "team-total" | "player-prop";
+export type MarketKind = "moneyline" | "spread" | "total" | "team-total" | "player-prop" | "beer-prop";
 
 export const SCORING_RULES = {
   target: 21,
@@ -107,12 +108,14 @@ export interface MarketSelection {
   gameId: GameId;
   gameNumber: number;
   kind: MarketKind;
+  competition?: Competition;
   category: string;
   subject: string;
   playerId?: string;
+  propId?: string;
   teamId?: TeamId;
   stat?: StatKey;
-  side: "over" | "under" | "team1" | "team2";
+  side: "over" | "under" | "team1" | "team2" | "yes" | "no";
   line?: number;
   label: string;
   shortLabel: string;
@@ -143,8 +146,10 @@ export interface TicketLeg {
   marketId: string;
   gameId: GameId;
   kind: MarketKind;
+  competition?: Competition;
   subject: string;
   playerId?: string;
+  propId?: string;
   teamId?: TeamId;
   stat?: StatKey;
   side: MarketSelection["side"];
@@ -215,6 +220,71 @@ export interface SharedScheduleRow {
   updatedAt: string;
 }
 
+export interface BeerEvent {
+  eventId: string;
+  number: number;
+  name: string;
+}
+
+export interface BeerMatchup {
+  matchupId: string;
+  eventId: string;
+  eventNumber: number;
+  sequence: number;
+  team1Id: TeamId;
+  team2Id: TeamId;
+  team1: string;
+  team2: string;
+  status: "UPCOMING" | "LIVE" | "FINAL";
+  bettingEnabled: boolean;
+  bettingLocked: boolean;
+  countsTowardStandings: boolean;
+  winnerTeamId: TeamId | null;
+  team1Score: string;
+  team2Score: string;
+  final: boolean;
+  updatedAt: string;
+  notes: string;
+}
+
+export interface BeerMoneyline {
+  matchupId: string;
+  teamId: TeamId;
+  teamName: string;
+  americanOdds: number | null;
+  bettingEnabled: boolean;
+  notes: string;
+}
+
+export type BeerPropMarketType = "yes-no" | "over-under";
+
+export interface BeerDieProp {
+  propId: string;
+  matchupId: string;
+  name: string;
+  scope: "team" | "matchup";
+  teamId: TeamId | null;
+  marketType: BeerPropMarketType;
+  line: number | null;
+  overAmericanOdds: number | null;
+  underAmericanOdds: number | null;
+  yesAmericanOdds: number | null;
+  noAmericanOdds: number | null;
+  actualValue: number | null;
+  winningSide: "over" | "under" | "yes" | "no" | null;
+  bettingEnabled: boolean;
+  bettingLocked: boolean;
+  final: boolean;
+  notes: string;
+}
+
+export interface BeerStanding {
+  teamId: TeamId;
+  wins: number;
+  losses: number;
+  rank: number;
+}
+
 export interface SharedBoxScore extends PlayerBoxScore {
   gameId: GameId;
   scenario: Scenario;
@@ -244,8 +314,10 @@ export interface SharedBetLeg {
   legNumber: number;
   gameId: GameId;
   kind: MarketKind;
+  competition?: Competition;
   subject: string;
   playerId?: string;
+  propId?: string;
   teamId?: TeamId;
   stat?: StatKey;
   side: MarketSelection["side"];
@@ -264,6 +336,11 @@ export interface CommunityState {
   bets: SharedBet[];
   betLegs: SharedBetLeg[];
   participants: string[];
+  beerEnabled: boolean;
+  beerEvents: BeerEvent[];
+  beerMatchups: BeerMatchup[];
+  beerMoneylines: BeerMoneyline[];
+  beerDieProps: BeerDieProp[];
   loadedAt: string;
 }
 
