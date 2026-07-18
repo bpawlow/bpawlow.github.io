@@ -44,23 +44,11 @@ function configNumber(config: CommunityState["config"], key: string, fallback: n
   return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
 }
 
-function configInteger(config: CommunityState["config"], key: string, fallback: number, min: number, max: number): number {
-  return Math.round(configNumber(config, key, fallback, min, max));
-}
-
 export function modelConfigFromCommunity(community: CommunityState | null): ModelConfig {
   const config = community?.config ?? {};
   return {
     straightVig: configNumber(config, "STRAIGHT_VIG", DEFAULT_MODEL_CONFIG.straightVig, 0, 0.2),
     parlayBaseVig: configNumber(config, "PARLAY_BASE_VIG", DEFAULT_MODEL_CONFIG.parlayBaseVig, 0, 0.3),
-    pointsLineOffset: configInteger(config, "POINTS_LINE_OFFSET", DEFAULT_MODEL_CONFIG.pointsLineOffset, -5, 5),
-    reboundsLineOffset: configInteger(config, "REBOUNDS_LINE_OFFSET", DEFAULT_MODEL_CONFIG.reboundsLineOffset, -5, 5),
-    assistsLineOffset: configInteger(config, "ASSISTS_LINE_OFFSET", DEFAULT_MODEL_CONFIG.assistsLineOffset, -5, 5),
-    threesLineOffset: configInteger(config, "THREES_LINE_OFFSET", DEFAULT_MODEL_CONFIG.threesLineOffset, -5, 5),
-    prLineOffset: configInteger(config, "PR_LINE_OFFSET", DEFAULT_MODEL_CONFIG.prLineOffset, -10, 10),
-    paLineOffset: configInteger(config, "PA_LINE_OFFSET", DEFAULT_MODEL_CONFIG.paLineOffset, -10, 10),
-    raLineOffset: configInteger(config, "RA_LINE_OFFSET", DEFAULT_MODEL_CONFIG.raLineOffset, -10, 10),
-    praLineOffset: configInteger(config, "PRA_LINE_OFFSET", DEFAULT_MODEL_CONFIG.praLineOffset, -15, 15),
     threePointRateMin: configNumber(config, "THREE_POINT_RATE_MIN", DEFAULT_MODEL_CONFIG.threePointRateMin, 0.05, 0.8),
     threePointRateMax: configNumber(config, "THREE_POINT_RATE_MAX", DEFAULT_MODEL_CONFIG.threePointRateMax, 0.1, 0.95),
     scoringUsageWeight: configNumber(config, "SCORING_USAGE_WEIGHT", DEFAULT_MODEL_CONFIG.scoringUsageWeight, 0, 1.5),

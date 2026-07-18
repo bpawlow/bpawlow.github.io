@@ -14,7 +14,7 @@ import type {
   ModelConfig,
 } from "../types";
 import { clamp, offeredPrice } from "./odds";
-import { balancedHalfLine, offsetLine } from "./lineSelection";
+import { balancedHalfLine } from "./lineSelection";
 import { effectiveAssignments } from "./rosters";
 
 const ctx: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobalScope;
@@ -362,14 +362,7 @@ function buildMarkets(
         points: "Points", rebounds: "Rebounds", assists: "Assists", threes: "3-pointers", pr: "Pts + Reb", pa: "Pts + Ast", ra: "Reb + Ast", pra: "PRA",
       };
       for (const [stat, values] of statValues) {
-        const offset = stat === "points" ? modelConfig.pointsLineOffset
-          : stat === "rebounds" ? modelConfig.reboundsLineOffset
-            : stat === "assists" ? modelConfig.assistsLineOffset
-              : stat === "threes" ? modelConfig.threesLineOffset
-                : stat === "pr" ? modelConfig.prLineOffset
-                  : stat === "pa" ? modelConfig.paLineOffset
-                    : stat === "ra" ? modelConfig.raLineOffset : modelConfig.praLineOffset;
-        const line = offsetLine(balancedHalfLine(values), offset);
+        const line = balancedHalfLine(values);
         const pair = outcomesAbove(values, line);
         const groupId = `${game.id}:player:${player.id}:${stat}`;
         registerPair(

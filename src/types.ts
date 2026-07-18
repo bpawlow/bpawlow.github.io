@@ -14,14 +14,6 @@ export const SCORING_RULES = {
 export interface ModelConfig {
   straightVig: number;
   parlayBaseVig: number;
-  pointsLineOffset: number;
-  reboundsLineOffset: number;
-  assistsLineOffset: number;
-  threesLineOffset: number;
-  prLineOffset: number;
-  paLineOffset: number;
-  raLineOffset: number;
-  praLineOffset: number;
   threePointRateMin: number;
   threePointRateMax: number;
   scoringUsageWeight: number;
@@ -42,14 +34,6 @@ export interface ModelConfig {
 export const DEFAULT_MODEL_CONFIG: ModelConfig = {
   straightVig: 0.06,
   parlayBaseVig: 0.08,
-  pointsLineOffset: 0,
-  reboundsLineOffset: 0,
-  assistsLineOffset: 0,
-  threesLineOffset: 0,
-  prLineOffset: 0,
-  paLineOffset: 0,
-  raLineOffset: 0,
-  praLineOffset: 0,
   threePointRateMin: 0.22,
   threePointRateMax: 0.55,
   scoringUsageWeight: 0.65,

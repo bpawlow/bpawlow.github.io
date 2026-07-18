@@ -10,14 +10,6 @@ from openpyxl import load_workbook
 MODEL_CONFIG = (
     ("STRAIGHT_VIG", 0.06, "Straight-market overround used for game lines and player props."),
     ("PARLAY_BASE_VIG", 0.08, "Base parlay margin applied after joint simulation pricing."),
-    ("POINTS_LINE_OFFSET", 0, "Whole-number adjustment added to every points player line; allowed range -5 to 5."),
-    ("REBOUNDS_LINE_OFFSET", 0, "Whole-number adjustment added to every rebounds player line; allowed range -5 to 5."),
-    ("ASSISTS_LINE_OFFSET", 0, "Whole-number adjustment added to every assists player line; allowed range -5 to 5."),
-    ("THREES_LINE_OFFSET", 0, "Whole-number adjustment added to every made-threes player line; allowed range -5 to 5."),
-    ("PR_LINE_OFFSET", 0, "Whole-number adjustment added to every points-plus-rebounds line; allowed range -10 to 10."),
-    ("PA_LINE_OFFSET", 0, "Whole-number adjustment added to every points-plus-assists line; allowed range -10 to 10."),
-    ("RA_LINE_OFFSET", 0, "Whole-number adjustment added to every rebounds-plus-assists line; allowed range -10 to 10."),
-    ("PRA_LINE_OFFSET", 0, "Whole-number adjustment added to every points-plus-rebounds-plus-assists line; allowed range -15 to 15."),
     ("THREE_POINT_RATE_MIN", 0.22, "Minimum amateur pickup three-point attempt rate."),
     ("THREE_POINT_RATE_MAX", 0.55, "Maximum amateur pickup three-point attempt rate."),
     ("SCORING_USAGE_WEIGHT", 0.65, "How strongly scoring rating concentrates shot attempts."),
@@ -74,8 +66,8 @@ def migrate(path: Path) -> None:
                 config.cell(row, 2).value = value
                 break
     for row in range(2, config.max_row + 1):
-        if config.cell(row, 1).value == "MODEL_VERSION" and (config.cell(row, 2).value or 0) < 5:
-            config.cell(row, 2).value = 5
+        if config.cell(row, 1).value == "MODEL_VERSION" and (config.cell(row, 2).value or 0) < 4:
+            config.cell(row, 2).value = 4
             break
 
     schedule = workbook["Schedule & Results"]

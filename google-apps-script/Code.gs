@@ -236,14 +236,6 @@ function ensureModelConfig_() {
   var existing = {};
   rows.forEach(function(row) { existing[row.Key] = row.Value; });
   var modelRows = [
-    ["POINTS_LINE_OFFSET", 0, "Whole-number adjustment added to every points player line; allowed range -5 to 5."],
-    ["REBOUNDS_LINE_OFFSET", 0, "Whole-number adjustment added to every rebounds player line; allowed range -5 to 5."],
-    ["ASSISTS_LINE_OFFSET", 0, "Whole-number adjustment added to every assists player line; allowed range -5 to 5."],
-    ["THREES_LINE_OFFSET", 0, "Whole-number adjustment added to every made-threes player line; allowed range -5 to 5."],
-    ["PR_LINE_OFFSET", 0, "Whole-number adjustment added to every points-plus-rebounds line; allowed range -10 to 10."],
-    ["PA_LINE_OFFSET", 0, "Whole-number adjustment added to every points-plus-assists line; allowed range -10 to 10."],
-    ["RA_LINE_OFFSET", 0, "Whole-number adjustment added to every rebounds-plus-assists line; allowed range -10 to 10."],
-    ["PRA_LINE_OFFSET", 0, "Whole-number adjustment added to every points-plus-rebounds-plus-assists line; allowed range -15 to 15."],
     ["THREE_POINT_RATE_MIN", 0.22, "Minimum amateur pickup three-point attempt rate."],
     ["THREE_POINT_RATE_MAX", 0.55, "Maximum amateur pickup three-point attempt rate."],
     ["SCORING_USAGE_WEIGHT", 0.65, "How strongly scoring rating concentrates shot attempts."],
@@ -280,13 +272,13 @@ function ensureModelConfig_() {
     }
   });
   var config = getConfig_();
-  if (config.MODEL_VERSION !== undefined && Number(config.MODEL_VERSION) < 5) {
+  if (config.MODEL_VERSION !== undefined && Number(config.MODEL_VERSION) < 4) {
     var values = configSheet.getDataRange().getValues();
     var keyColumn = values[0].indexOf("Key");
     var valueColumn = values[0].indexOf("Value");
     for (var row = 1; row < values.length; row++) {
       if (values[row][keyColumn] === "MODEL_VERSION") {
-        configSheet.getRange(row + 1, valueColumn + 1).setValue(5);
+        configSheet.getRange(row + 1, valueColumn + 1).setValue(4);
         break;
       }
     }

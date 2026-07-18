@@ -131,24 +131,7 @@ For example, if Peter moves from Team A to Team B in `game-2`, enter one `game-2
 
 For a last-minute change to an upcoming game, use `Game Rosters` instead of rewriting completed-game assignments or historical box scores. Existing tickets retain their original labels, odds, and canonical team identity. Verify the updated markets and roster before reopening betting. Use `EXHIBITION` plus `Counts Toward Standings? = FALSE` for a casual post-tournament game. A championship can be counted or excluded according to the organizer’s choice.
 
-After changing rosters or model settings, increment `MODEL_VERSION`, refresh the website, and do not change accepted betting assumptions without closing betting and reviewing existing tickets. Player lines are selected near the simulated 50/50 threshold before any organizer offset is applied; there are no editable quantile settings. The most useful advanced controls are `ASSIST_ROLE_EXPONENT`, `ASSIST_ROLE_WEIGHT`, `REBOUND_ROLE_EXPONENT`, and `REBOUND_ROLE_WEIGHT`, which adjust how strongly elite playmakers and rebounders receive individual credit. The points and three-point sensitivity controls are calibration-only; leave them at their defaults unless you are deliberately recalibrating the model.
-
-### Adjusting player prop lines across the board
-
-The `App Config` tab includes one whole-number line offset for every bettable player-prop category:
-
-- `POINTS_LINE_OFFSET`
-- `REBOUNDS_LINE_OFFSET`
-- `ASSISTS_LINE_OFFSET`
-- `THREES_LINE_OFFSET`
-- `PR_LINE_OFFSET` (points + rebounds)
-- `PA_LINE_OFFSET` (points + assists)
-- `RA_LINE_OFFSET` (rebounds + assists)
-- `PRA_LINE_OFFSET` (points + rebounds + assists)
-
-Leave a setting at `0` for no adjustment. Set it to `1` to raise every line in that category by one whole point, or `-1` to lower every line by one. For example, `ASSISTS_LINE_OFFSET = 1` changes a balanced 1.5-assist line to 2.5 assists for every player. Combo markets have wider allowed ranges because their totals are larger.
-
-These offsets are applied before pricing, so the odds are recalculated from the new line. Raising a line therefore generally makes the over less likely and moves the over odds toward heavier plus money; it does not preserve even odds. Use small changes, usually one point at a time. If the objective is a higher line that still prices close to even, adjust player ratings, rotation share, or the role/production calibration instead. After changing offsets, increment `MODEL_VERSION` and refresh the website.
+After changing rosters or model settings, increment `MODEL_VERSION`, refresh the website, and do not change accepted betting assumptions without closing betting and reviewing existing tickets. Player lines are always selected near the simulated 50/50 threshold; there are no editable quantile settings. The most useful advanced controls are `ASSIST_ROLE_EXPONENT`, `ASSIST_ROLE_WEIGHT`, `REBOUND_ROLE_EXPONENT`, and `REBOUND_ROLE_WEIGHT`, which adjust how strongly elite playmakers and rebounders receive individual credit. The points and three-point sensitivity controls are calibration-only; leave them at their defaults unless you are deliberately recalibrating the model.
 
 ## Leaderboards
 

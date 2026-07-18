@@ -36,7 +36,3 @@ export function balancedHalfLine(values: ArrayLike<number>): number {
   }
   return bestLine;
 }
-
-export function offsetLine(line: number, offset: number): number {
-  return line + Math.round(offset);
-}

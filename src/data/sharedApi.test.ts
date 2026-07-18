@@ -48,17 +48,11 @@ describe("shared Sheet state", () => {
 
   it("uses the calibrated player-prop defaults when config rows are missing", () => {
     expect(modelConfigFromCommunity(community)).toMatchObject({
-      pointsLineOffset: 0,
-      assistsLineOffset: 0,
       scoringUsageWeight: 0.65,
       assistRoleExponent: 2.2,
       assistRoleWeight: 1.4,
       reboundRoleExponent: 1.9,
       reboundRoleWeight: 1.35,
-    });
-    expect(modelConfigFromCommunity({ ...community, config: { POINTS_LINE_OFFSET: 2.4, PRA_LINE_OFFSET: -1.6 } })).toMatchObject({
-      pointsLineOffset: 2,
-      praLineOffset: -2,
     });
   });
 });
