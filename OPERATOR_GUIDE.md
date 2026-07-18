@@ -185,6 +185,10 @@ The spreadsheet contains equivalent `Betting Leaderboard` and `Player Leaderboar
 - Apps Script checks the shared `Bets` ledger before accepting a ticket, preventing a bettor from staking more than the shared available balance.
 - Every ticket stores the original roster configuration, odds, stake, payout, model version, and immutable leg details.
 - Do not manually alter `Bets` or `Bet Legs` during play unless correcting an organizer-confirmed data error.
+
+### Replenish every participant to 100 units
+
+For a new Beer Olympics betting slate, use the Google Sheet menu `Bachelor Book → Reset all betting bankrolls`. Confirm the warning. This permanently deletes all rows in `Bets` and `Bet Legs`, preserves the `Participants` roster, and restores every participant to the configured 100-unit starting balance. Use this only between betting slates; it removes the historical betting leaderboard and ticket history.
 - If a result is corrected, the settlement pass recomputes ticket states from the official records.
 
 ## Removing a test participant

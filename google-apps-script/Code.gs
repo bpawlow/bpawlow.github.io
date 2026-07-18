@@ -50,7 +50,37 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu("Bachelor Book")
     .addItem("Delete a bet", "deleteBetPrompt")
     .addItem("Remove a participant", "removeParticipantPrompt")
+    .addItem("Reset all betting bankrolls", "resetAllBankrollsPrompt")
     .addToUi();
+}
+
+function resetAllBankrollsPrompt() {
+  var ui = SpreadsheetApp.getUi();
+  var confirmation = ui.alert("Reset all betting bankrolls", "This permanently deletes every row in Bets and Bet Legs, while keeping the participant roster. Every participant will return to the configured starting balance of 100 units. Continue?", ui.ButtonSet.YES_NO);
+  if (confirmation !== ui.Button.YES) return;
+  var result = resetAllBankrolls_();
+  ui.alert("Bankroll reset complete. " + result.deletedBets + " bets were removed; every participant now has 100 units available.");
+}
+
+function resetAllBankrolls_() {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var deletedBets = 0;
+    ["Bet Legs", "Bets"].forEach(function(name) {
+      var sheet = sheet_(name);
+      var rows = sheet.getLastRow();
+      if (rows > 1) {
+        if (name === "Bets") deletedBets = rows - 1;
+        sheet.deleteRows(2, rows - 1);
+      }
+    });
+    syncLeaderboards_(getConfig_());
+    SpreadsheetApp.flush();
+    return { deletedBets: deletedBets };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function removeParticipantPrompt() {
@@ -241,6 +271,8 @@ function ensureBeerSheets_() {
   });
   if (!optionalRows_("Beer Schedule & Results").length) seedBeerSchedule_();
   if (!optionalRows_("Beer Moneylines").length) seedBeerMoneylines_();
+  ensureBeerMoneylineDefaults_();
+  if (!optionalRows_("Beer Die Props").length) seedBeerDieProps_();
 }
 
 function seedBeerSchedule_() {
@@ -264,8 +296,38 @@ function seedBeerMoneylines_() {
   var rows = [];
   schedule.forEach(function(matchup) {
     [matchup["Team 1 ID"], matchup["Team 2 ID"]].forEach(function(teamId) {
-      rows.push([matchup["Matchup ID"], teamId, "", "", true, "Enter manual American odds."]);
+      rows.push([matchup["Matchup ID"], teamId, "", -110, true, "Neutral pick'em opening price."]);
     });
+  });
+  if (rows.length) sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+}
+
+function ensureBeerMoneylineDefaults_() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Beer Moneylines");
+  if (!sheet || sheet.getLastRow() < 2) return;
+  var values = sheet.getDataRange().getValues();
+  var headers = index_(values[0]);
+  var changed = false;
+  for (var row = 1; row < values.length; row++) {
+    if (values[row][headers["American Odds"]] === "" || values[row][headers["American Odds"]] === null) {
+      values[row][headers["American Odds"]] = -110;
+      changed = true;
+    }
+  }
+  if (changed) sheet.getRange(2, 1, values.length - 1, values[0].length).setValues(values.slice(1));
+}
+
+function seedBeerDieProps_() {
+  var sheet = sheet_("Beer Die Props");
+  var matchups = optionalRows_("Beer Schedule & Results").filter(function(row) { return row["Event ID"] === "beer-die"; });
+  var rows = [];
+  matchups.forEach(function(matchup) {
+    [matchup["Team 1 ID"], matchup["Team 2 ID"]].forEach(function(teamId) {
+      var slug = String(teamId).toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      rows.push([matchup["Matchup ID"] + "-corner-" + slug, matchup["Matchup ID"], "Corner cup", "team", teamId, "yes-no", "", "", "", 100, 100, "", "", true, false, false, "Neutral prop price; organizer defines the house-rule result."]);
+      rows.push([matchup["Matchup ID"] + "-self-sink-" + slug, matchup["Matchup ID"], "Self sink", "team", teamId, "yes-no", "", "", "", 100, 100, "", "", true, false, false, "Neutral prop price; organizer defines the house-rule result."]);
+    });
+    rows.push([matchup["Matchup ID"] + "-total-fifas", matchup["Matchup ID"], "Total fifas", "matchup", "", "over-under", 2.5, -110, -110, "", "", "", "", true, false, false, "Starter line; organizer may edit the line and odds."]);
   });
   if (rows.length) sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
 }

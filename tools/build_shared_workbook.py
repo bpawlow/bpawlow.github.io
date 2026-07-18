@@ -212,12 +212,20 @@ add_validation(beer_schedule, '"Team A,Team B,Team C"', "N2:N100")
 beer_moneylines = new_sheet(wb, "Beer Moneylines", ["Matchup ID", "Team ID", "Team Name", "American Odds", "Betting Enabled?", "Notes"], {"A": 30, "B": 14, "C": 22, "D": 18, "E": 18, "F": 42})
 for row in beer_schedule_rows:
     for team in (row[5], row[7]):
-        beer_moneylines.append([row[3], team, team, "", True, "Enter manual American odds."])
+        beer_moneylines.append([row[3], team, team, -110, True, "Neutral pick'em opening price."])
 for row in range(2, beer_moneylines.max_row + 1):
     beer_moneylines.cell(row, 4).fill = PatternFill("solid", fgColor=YELLOW)
 add_validation(beer_moneylines, '"TRUE,FALSE"', "E2:E200")
 
 beer_props = new_sheet(wb, "Beer Die Props", ["Prop ID", "Matchup ID", "Prop Name", "Scope", "Team ID", "Market Type", "Line", "Over American Odds", "Under American Odds", "Yes American Odds", "No American Odds", "Actual Result Value", "Winning Side", "Betting Enabled?", "Betting Locked?", "Final?", "Notes"], {"A": 24, "B": 30, "C": 28, "D": 14, "E": 14, "F": 16, "G": 10, "H": 18, "I": 20, "J": 18, "K": 18, "L": 20, "M": 16, "N": 18, "O": 18, "P": 10, "Q": 42})
+for row in beer_schedule_rows:
+    if row[0] != "beer-die":
+        continue
+    for team in (row[5], row[7]):
+        slug = team.lower().replace(" ", "-")
+        beer_props.append([f"{row[3]}-corner-{slug}", row[3], "Corner cup", "team", team, "yes-no", "", "", "", 100, 100, "", "", True, False, False, "Neutral prop price; organizer defines the house-rule result."])
+        beer_props.append([f"{row[3]}-self-sink-{slug}", row[3], "Self sink", "team", team, "yes-no", "", "", "", 100, 100, "", "", True, False, False, "Neutral prop price; organizer defines the house-rule result."])
+    beer_props.append([f"{row[3]}-total-fifas", row[3], "Total fifas", "matchup", "", "over-under", 2.5, -110, -110, "", "", "", "", True, False, False, "Starter line; organizer may edit the line and odds."])
 for row in range(2, 102):
     for column in range(1, 18):
         beer_props.cell(row, column).fill = PatternFill("solid", fgColor=YELLOW)
